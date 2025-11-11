@@ -15,8 +15,8 @@ func main() {
 	})
 
 	// 1. İş: 4 saniye sonra çalışacak (Call 1)
-	scheduler.ScheduleTask("Call-123", 1*time.Second, func() {
-		fmt.Println("\n--- Call-123: 1 saniye sonra planlanan iş çalıştı. ---")
+	scheduler.ScheduleTask("Call-123", 2*time.Second, func() {
+		fmt.Println("\n--- Call-123: 2 saniye sonra planlanan iş çalıştı. ---")
 	})
 
 	// 2. İş: 10 saniye sonra çalışacak (Call 456)
