@@ -1,0 +1,26 @@
+{
+  "Environment": "development",
+  "RedisAddresses": [
+    "10.12.135.27:7001",
+    "10.12.135.28:7001",
+    "10.12.135.29:7001",
+    "10.12.135.27:7002",
+    "10.12.135.28:7002",
+    "10.12.135.29:7002",
+    "10.12.135.27:7003",
+    "10.12.135.28:7003",
+    "10.12.135.29:7003"
+  ],
+  "RedisPassword": "foobared",
+  "LoadSnapshotOnStart": false,
+  "MinLogLevel": 4,
+  "RejectedCallMinWaitTime": 5,
+  "RejectedCallCleanupCount": 5,
+  "RejectedCallProcessingInterval": 5,
+  "RejectedCallWaitingMinQueueLength": 100,
+  "publisherHostName": "GB90015176N1",
+  "logDirectory": "logs",
+  "HttpServerEnabled": true,
+  "Version": 20,
+  "HttpPort": 9090
+}
