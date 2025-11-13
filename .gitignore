@@ -1,0 +1,12 @@
+/matchmaker_snapshot.json
+/OtherFiles
+/program-linux
+app-async*
+/docs
+/logs
+/testdocs
+/last_healthy_checkpoint.txt
+*last_healthy_checkpoint.txt
+/*.rar
+*.rar
+matchmaker_snapshot.txt
