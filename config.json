@@ -19,10 +19,11 @@
     "HttpServerEnabled": true,
     "Version": 20,
     "HttpPort": 9091,
+    "DBConnectingString": "server=GAVWSQLTST01.global-bilgi.entp;database=gbWebPhone_test;integrated security=true",
     "ari_connections": [
         {
             "Id": "1",
-            "Application": "gbqe-client1-prp",
+            "Application": "X-gbqe-client1",
             "WebsocketUrl": "ws://10.12.135.33:8088/ari/events",
             "RestUrl": "http://10.12.135.33:8088/ari",
             "Username": "ari4java",
@@ -30,7 +31,7 @@
         },
         {
             "Id": "2",
-            "Application": "gbqe-client2",
+            "Application": "Xgbqe-client12",
             "WebsocketUrl": "ws://10.12.135.33:8088/ari/events",
             "RestUrl": "http://10.12.135.33:8088/ari",
             "Username": "ari4java",
@@ -38,9 +39,49 @@
         },
         {
             "Id": "3",
+            "Application": "gbqe-client3",
+            "WebsocketUrl": "ws://10.14.114.33:8088/ari/events",
+            "RestUrl": "http://10.14.114.33:8088/ari",
+            "Username": "ari4java",
+            "Password": "yothere"
+        },
+        {
+            "Id": "4",
+            "Application": "gbqe-client2",
+            "WebsocketUrl": "ws://10.14.114.33:8088/ari/events",
+            "RestUrl": "http://10.14.114.33:8088/ari",
+            "Username": "ari4java",
+            "Password": "yothere"
+        },
+        {
+            "Id": "5",
             "Application": "gbqe-client1",
-            "WebsocketUrl": "ws://10.14.114.20:8088/ari/events",
-            "RestUrl": "http://10.14.114.20:8088/ari",
+            "WebsocketUrl": "ws://10.14.114.33:8088/ari/events",
+            "RestUrl": "http://10.14.114.33:8088/ari",
+            "Username": "ari4java",
+            "Password": "yothere"
+        },
+        {
+            "Id": "6",
+            "Application": "gbqe-outbound1",
+            "WebsocketUrl": "ws://10.14.114.33:8088/ari/events",
+            "RestUrl": "http://10.14.114.33:8088/ari",
+            "Username": "ari4java",
+            "Password": "yothere"
+        },
+        {
+            "Id": "7",
+            "Application": "gbqe-outbound2",
+            "WebsocketUrl": "ws://10.14.114.33:8088/ari/events",
+            "RestUrl": "http://10.14.114.33:8088/ari",
+            "Username": "ari4java",
+            "Password": "yothere"
+        },
+        {
+            "Id": "8",
+            "Application": "gbqe-outbound3",
+            "WebsocketUrl": "ws://10.14.114.33:8088/ari/events",
+            "RestUrl": "http://10.14.114.33:8088/ari",
             "Username": "ari4java",
             "Password": "yothere"
         }

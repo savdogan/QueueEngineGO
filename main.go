@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -10,8 +12,6 @@ import (
 )
 
 // Global Log Seviyesi Değişkeni: CustomLog'un erişimi için config'den buraya aktarılacak
-var cfgMinLogLevel LogLevel
-var AppConfig Config
 
 func main() {
 
@@ -30,68 +30,77 @@ func main() {
 		log.Printf("Failed to load config: %v", err)
 		return
 	}
-	AppConfig := cfg
+	AppConfig = cfg
 
 	log.Printf("Successed to load config")
 
 	cfgPublisherHostName := getHostname()
-	AppConfig.mu = &sync.RWMutex{}
 	cfgLogDirectory = AppConfig.LogDirectory
 	cfgMinLogLevel = AppConfig.MinLogLevel
 	//redisAddresses := AppConfig.RedisAddresses
 	//redisPassword := AppConfig.RedisPassword
 	//LoadSnapshotOnStart := AppConfig.LoadSnapshotOnStart
-	AppConfig.mu.Lock()
+	AppConfig.Mu.Lock()
 	AppConfig.PublisherHostName = cfgPublisherHostName
 	AppConfig.Version = version
 	log.Printf("PublisherHostName : %s", AppConfig.PublisherHostName)
 	log.Printf("Version : %d", AppConfig.Version)
-	AppConfig.mu.Unlock()
+	AppConfig.Mu.Unlock()
 
-	log.Printf("Async logging is starting...")
-
-	startAsyncLogger()
-	time.Sleep(5 * time.Second)
-
-	manager := NewClientManager()
-	var wg sync.WaitGroup
-
-	CustomLog(LevelInfo, "Ari connections is starting...")
-	// 3. ARI Bağlantılarını Başlat
-	for _, ariCfg := range AppConfig.AriConnections {
-		wg.Add(1)
-
-		go func(ariCfg AriConfig) {
-			defer wg.Done()
-			if err := runApp(ctx, ariCfg, manager); err != nil {
-				CustomLog(LevelError, "ARI application failed to start for %s: %v", ariCfg.Application, err)
-			}
-		}(ariCfg)
+	//------------LOG Bölümü Başlangıç
+	log.Printf("Async logging is starting, you can now follow it in the log file. ")
+	err = startAsyncLogger()
+	if err != nil {
+		log.Printf("Logging starting is failed.")
+		os.Exit(1)
 	}
+	log.Printf("Async logging is started")
+	//------------LOG Bölümü Başlangıç
 
-	// 4. HTTP Sunucusunu Başlat (Config'den portu kullanarak)
-	if AppConfig.HttpServerEnabled {
-		startHttpEnabled(manager)
-	} else {
-		CustomLog(LevelInfo, "HTTP Server is disabled via config.")
-	}
-
-	// 1. SQL Server Bağlantısını KUR (Hata olursa burada durur)
-	sqlInstance := "GAVWSQLTST01.global-bilgi.entp"
-	sqlDB := "gbWebPhone_test"
-	sqlUser := "[GLOBAL-BILGI\\savdogan]" // Kullanıcı bilgisi gerekli değil ancak loglamada tutulabilir
-
-	if err := InitDBConnection(sqlInstance, sqlDB, sqlUser); err != nil {
+	//------------DB Conncetion Bölümü Başlangıç
+	if err := InitDBConnection(); err != nil {
 		CustomLog(LevelFatal, "Veritabanı bağlantısı kurulamadı: %v", err)
+		os.Exit(1)
 		return
 	}
 	defer CloseDBConnection() // Uygulama sonlandığında bağlantıyı kapat
+	//------------DB Conncetion Bölümü Bitiş
+
+	var wg sync.WaitGroup
 
 	InitQueueManager()
 
-	go func() {
+	//------------HTTP sunucuus başlangıç
+	if AppConfig.HttpServerEnabled {
+		startHttpEnabled(globalClientManager)
+	} else {
+		CustomLog(LevelInfo, "HTTP Server is disabled via config.")
+	}
+	//------------HTTP sunucuus bitiş
 
-		time.Sleep(5 * time.Second)
+	CustomLog(LevelInfo, "Hizmetlerin hazır olması bekleniyor...")
+
+	for {
+		// 1. Koşul Kontrolü
+		if loadingIsOkForDBManager && loadingIsOkForQueueDefinition {
+			CustomLog(LevelInfo, "\n✅ Tüm gereklilikler (HTTP, DB, QueueDef) sağlandı!")
+			break // Döngüden çık
+		}
+
+		// 2. Durum Raporu (İsteğe bağlı)
+		CustomLog(LevelInfo, "Bekleniyor... DB: %t, QueueDef: %t\n",
+			loadingIsOkForDBManager, loadingIsOkForQueueDefinition)
+
+		// 3. Duraklama
+		// 200 milisaniye bekle
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	fmt.Println("Uygulama ana işleme devam ediyor.")
+
+	InitAriConnection(&wg, ctx)
+
+	go func() {
 
 		// Kullanım Örneği (Örneğin StasisStart geldikten sonra)
 		queueName := "Yuktesti" // Varsayımsal kuyruk adı
@@ -140,7 +149,7 @@ func main() {
 	}
 
 	AppConfig = cfg
-	AppConfig.mu = &sync.RWMutex{}
+	AppConfig.Mu = &sync.RWMutex{}
 
 	log.Printf("[SETUP] Konfigürasyon başarıyla yüklendi. Ortam: %s , %+v", AppConfig.Environment, cfg)
 

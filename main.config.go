@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -60,9 +61,9 @@ func handleLogDirectory(w http.ResponseWriter, valueStr string) {
 	}
 
 	// 2. GÜVENLİ YAZMA: AppConfig değerini güncelle
-	AppConfig.mu.Lock()
+	AppConfig.Mu.Lock()
 	AppConfig.LogDirectory = newDir
-	AppConfig.mu.Unlock()
+	AppConfig.Mu.Unlock()
 
 	logDirectoryChanged = true
 
@@ -84,7 +85,7 @@ func handleLogLevel(w http.ResponseWriter, cmd string) {
 
 	configUpdated := true
 
-	AppConfig.mu.Lock()
+	AppConfig.Mu.Lock()
 
 	switch strings.ToLower(cmd) { // Komutu küçük harfe çevirerek karşılaştır
 	case "loglevelinfo":
@@ -107,7 +108,7 @@ func handleLogLevel(w http.ResponseWriter, cmd string) {
 		http.Error(w, fmt.Sprintf("Bilinmeyen Loglevel: %s", cmd), http.StatusBadRequest)
 	}
 
-	AppConfig.mu.Unlock()
+	AppConfig.Mu.Unlock()
 
 	if configUpdated {
 
@@ -147,9 +148,9 @@ func handleBooleanConfig(w http.ResponseWriter, paramName string, valueStr strin
 
 	switch paramName {
 	case "LoadSnapshotOnStart":
-		AppConfig.mu.Lock()
+		AppConfig.Mu.Lock()
 		AppConfig.LoadSnapshotOnStart = value
-		AppConfig.mu.Unlock()
+		AppConfig.Mu.Unlock()
 		configUpdated = true
 		// Eğer gelecekte başka boolean ayarlarınız olursa buraya eklenecektir.
 	}
@@ -188,7 +189,7 @@ func handleIntConfig(w http.ResponseWriter, paramName string, valueStr string) {
 	// 3. AppConfig yapısındaki ilgili alanı güncelleme (Kilitleme zorunlu)
 	var configUpdated bool
 
-	AppConfig.mu.Lock()
+	AppConfig.Mu.Lock()
 
 	switch paramName {
 
@@ -196,7 +197,7 @@ func handleIntConfig(w http.ResponseWriter, paramName string, valueStr string) {
 		CustomLog(LevelInfo, "%d", value)
 	}
 
-	AppConfig.mu.Unlock()
+	AppConfig.Mu.Unlock()
 
 	if configUpdated {
 		// Başarılı yanıt
@@ -231,6 +232,8 @@ func loadConfig(path string) (Config, error) {
 		log.Printf("[ERROR] :config JSON çözümlenemedi: %+v", err)
 		return cfg, err
 	}
+
+	cfg.Mu = &sync.RWMutex{}
 
 	return cfg, nil
 }

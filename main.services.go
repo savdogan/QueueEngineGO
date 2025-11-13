@@ -31,7 +31,7 @@ func startHttpEnabled(manager *ClientManager) {
 				return
 			}
 
-			h, err := createCall(cl)
+			h, err := makeCall(cl)
 			if err != nil {
 				CustomLog(LevelError, "Failed to create call via %s: %v", appName, err)
 				w.WriteHeader(http.StatusBadGateway)
@@ -195,4 +195,8 @@ func startHttpEnabled(manager *ClientManager) {
 			CustomLog(LevelError, "Http server (port : %d) error: %v", AppConfig.HttpPort, err)
 		}
 	}()
+}
+
+func InıtDbService() {
+
 }

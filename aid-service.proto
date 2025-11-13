@@ -1,0 +1,91 @@
+syntax = "proto3";
+option java_multiple_files = true;
+option go_package = "aid-service/proto";
+package com.globalbilgi.gbaidengine.grpc;
+import "google/protobuf/timestamp.proto";
+
+message InteractionDistributionRequest {
+
+    //interaction which should be distributed to agent
+    Interaction targetInteraction = 1;
+
+    //group ids ordered by prioritization (will be used by Powerdialer in future)
+    repeated int64 groups = 2;
+
+    //agent which have highest priority while distributing
+    string preferredAgent = 3;
+
+    //skill ids which required to handle interaction (in addition to queue skills)
+    repeated int64 requiredSkills = 4;
+
+    //Id of instance that sent request
+    string instanceId = 5;
+
+    //Time when interaction first enter to queue(used to return interaction to queue respecting previous position)
+    int64 positionTimestamp = 6;
+}
+
+message Interaction {
+
+    //unique id of interaction
+    string id = 1;
+
+    //type of interaction
+    InteractionType type = 2;
+
+    //queue name where interaction raised
+    string queue = 3;
+
+    //priority of interaction in it's queue (interactions with higher priority will be distributed first)
+    int32 priority = 4;
+}
+
+message Queue {
+
+    // queue name
+    string name = 1;
+}
+
+enum InteractionType {
+    CALL = 0;
+    CHAT = 1;
+    DIALER_CALL = 2;
+}
+
+message InteractionDistributionTimeEstimation {
+    //show how many seconds remains to distribute interaction
+    int32 estimation = 1;
+}
+
+message InteractionPosition {
+    //show position of interaction in it's queue (position numbering starts from 1)
+    int32 position = 1;
+}
+
+message InteractionDistributionResponse {
+    RegistrationState state = 1;
+    int32 estimation = 2;
+    int32 position = 3;
+    int64 positionTimestamp = 4;
+}
+
+enum RegistrationState {
+
+    //successful interaction queuing
+    SUCCESS = 0;
+
+    //interaction try to join to full queue
+    QUEUE_FULL = 1;
+
+    //interaction try to join queue where joinempty logic enabled
+    JOIN_EMPTY = 2;
+}
+
+service AidService {
+
+    rpc registerInteraction (InteractionDistributionRequest) returns (InteractionDistributionResponse);
+    rpc distributionTimeEstimation (Interaction) returns (InteractionDistributionTimeEstimation);
+    rpc queueWaitTimeEstimation (Queue) returns (InteractionDistributionTimeEstimation);
+    rpc interactionPosition (Interaction) returns (InteractionPosition);
+
+}

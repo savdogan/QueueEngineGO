@@ -8,18 +8,6 @@ import (
 	"github.com/CyCoreSystems/ari/v6"
 )
 
-// DBManager, tüm uygulama için tek bir SQL Server bağlantısını yönetir.
-type DBManager struct {
-	DB *sql.DB
-}
-
-// QueueCacheManager, DB bağlantısını ve Queue önbelleğini yönetir.
-type QueueCacheManager struct {
-	DB    *sql.DB
-	Cache map[string]*WbpQueue // Key: queue_name, Value: *WbpQueue
-	mu    sync.RWMutex         // Cache erişimi için kilit
-}
-
 // WbpQueue, [dbo].[wbp_queue] tablosunun bir satırını temsil eder.
 // json:"..." etiketleri, bu yapıyı bir API üzerinden gönderebilmeniz için eklendi.
 type WbpQueue struct {
@@ -108,6 +96,92 @@ type WbpQueue struct {
 	Migration                       sql.NullInt32  `json:"migration"`
 }
 
+type Queue struct {
+	ID                              int64
+	QueueName                       string
+	QueueDescription                string
+	Enabled                         bool
+	Deleted                         bool
+	CreateDate                      time.Time // sql.NullTime -> time.Time (Null ise sıfır zaman)
+	CreateUser                      int64     // sql.NullInt64 -> int64 (Null ise 0)
+	UpdateDate                      time.Time
+	UpdateUser                      int64
+	MediaArchivePeriod              int32
+	MediaDeletePeriod               int32
+	TenantID                        int64
+	TargetServiceLevel              int32
+	TargetServiceLevelThreshold     int32
+	MusicClass                      string
+	Announce                        string
+	Context                         string
+	Timeout                         int32
+	MonitorFormat                   string
+	Strategy                        string
+	ServiceLevel                    int32
+	Retry                           int32
+	Maxlen                          int32
+	MonitorType                     string
+	ReportHoldTime                  bool // sql.NullBool -> bool (Null ise false)
+	MemberDelay                     int32
+	MemberMacro                     string
+	Autofill                        bool
+	Weight                          int32
+	LeaveWhenEmpty                  string
+	JoinEmpty                       string
+	AnnounceFrequency               int32
+	MinAnnounceFrequency            int32
+	PeriodicAnnounceFrequency       int32
+	RelativePeriodAnnounce          bool
+	AnnounceHoldTime                string
+	AnnouncePosition                string
+	AnnounceRoundSeconds            int32
+	QueueYouAreNext                 string
+	QueueThereAre                   string
+	QueueCallsWaiting               string
+	QueueHoldTime                   string
+	QueueMinutes                    string
+	QueueSeconds                    string
+	QueueThankYou                   string
+	QueueLessThan                   string
+	QueueReportHold                 string
+	PeriodicAnnounce                string
+	SetInterfaceVar                 bool
+	EventWhenCalled                 bool
+	RingInUse                       bool
+	TimeoutRestart                  bool
+	SetQueueVar                     bool
+	SetQueueEntryVar                bool
+	EventMemberStatus               bool
+	ShortAbandonedThreshold         int64
+	ResultCodeTimer                 int32
+	ResultCodeTimerStatus           int64
+	Type                            int32
+	RelaxTimer                      int32
+	RelaxTimerEnabled               bool
+	ResultCodeTimerEnabled          bool
+	SuspendTransferTime             int32
+	MusicClassOnHold                string
+	WaitTimeout                     int32
+	PeriodicAnnounceInitialDelay    int32
+	PeriodicAnnounceMaxPlayCount    int32
+	ClientAnnounceSoundFile         string
+	ClientAnnounceMinEstimationTime int32
+	ActionAnnounceSoundFile         string
+	ActionAnnounceInitialDelay      int32
+	ActionAnnounceFrequency         int32
+	ActionAnnounceMaxPlayCount      int32
+	ActionAnnounceWaitTime          int32
+	ActionAnnounceAllowedDtmf       string
+	PositionAnnounceInitialDelay    int32
+	MinAnnouncedHoldTime            int32
+	MaxAnnouncedHoldTime            int32
+	HoldTimeAnnounceCalculationMode int32
+	QueueMoreThan                   string
+	ReportPosition                  bool
+	ActionAnnounceWrongDtmfHandling bool
+	Migration                       int32
+}
+
 // Daha Sonra Kullanılacak...
 type HttpEvent struct {
 	Type          string   `json:"type"`
@@ -127,23 +201,6 @@ type ScheduledTask struct {
 	index     int       // Heap içindeki pozisyonu (silme/güncelleme için kritik)
 }
 
-type LogLevel int
-
-const (
-	LevelFatal LogLevel = iota // 0: Kritik sistem hatası (Sistemden çıkar)
-	LevelError                 // 1: Hata durumları
-	LevelWarn                  // 2: Uyarılar
-	LevelInfo                  // 3: Genel Bilgi
-	LevelDebug                 // 4: Detaylı hata ayıklama
-	LevelTrace                 // 5: Herşey
-)
-
-// ClientManager, tüm aktif ARI istemcilerini yönetir.
-type ClientManager struct {
-	clients map[string]ari.Client
-	mu      sync.RWMutex
-}
-
 type Config struct {
 	Environment         string        `json:"Environment"`
 	RedisAddresses      []string      `json:"RedisAddresses"`
@@ -155,8 +212,9 @@ type Config struct {
 	HttpServerEnabled   bool          `json:"HttpServerEnabled"`
 	Version             int           `json:"Version"`
 	HttpPort            int           `json:"HttpPort"`
-	mu                  *sync.RWMutex // Yapılandırma okuma/yazma işlemleri için
+	Mu                  *sync.RWMutex // Yapılandırma okuma/yazma işlemleri için
 	AriConnections      []AriConfig   `json:"ari_connections"`
+	DBConnectingString  string        `json:"DBConnectingString"`
 }
 
 type AriConfig struct {
@@ -171,4 +229,181 @@ type AriConfig struct {
 type ChannelGetter interface { // <--- Hata burada!
 	ari.Event // Temel metotları miras alır
 	GetChannel() *ari.ChannelData
+}
+
+const PING_INTERVAL_SEC = 10
+const CONNECTOR_STOPPING_TIMEOUT_SEC = 30
+
+const ARI_MESSAGE_LOG_PREFIX = "[ARI MSG] "
+
+const DEFAULT_ARI_APPLICATION_PREFIX = "qbqe"
+
+const (
+	INBOUND_ARI_APPLICATION_PREFIX  = "gbqe-client"
+	OUTBOUND_ARI_APPLICATION_PREFIX = "gbqe-outbound"
+	CALL_MAX_TTL_SEC                = 21600
+	REDIS_PING_MESSAGE              = "ping"
+	COMPOSER_RESOURCE_KEY           = "description"
+	DEFAULT_IVR_ITERATION           = 1
+)
+
+// Loglama Seviyeleri (main.go'dan taşındı)
+type LogLevel int
+
+const (
+	LevelFatal LogLevel = iota // 0
+	LevelError                 // 1
+	LevelWarn                  // 2
+	LevelInfo                  // 3
+	LevelDebug                 // 4
+	LevelTrace                 // 5
+)
+
+// --- LANGUAGE Enum ---
+type LANGUAGE string
+
+const (
+	LANGUAGE_BY LANGUAGE = "BY"
+	LANGUAGE_EN LANGUAGE = "EN"
+	LANGUAGE_RU LANGUAGE = "RU"
+	LANGUAGE_TR LANGUAGE = "TR"
+	LANGUAGE_UA LANGUAGE = "UA"
+)
+
+const DEFAULT_LANGUAGE = LANGUAGE_EN
+
+// --- APPLICATION_SCENARIO Enum ---
+type APPLICATION_SCENARIO string
+
+const (
+	APPLICATION_SCENARIO_Queue      APPLICATION_SCENARIO = "queue"
+	APPLICATION_SCENARIO_Conference APPLICATION_SCENARIO = "conference"
+)
+
+const DEFAULT_APPLICATION_SCENARIO = APPLICATION_SCENARIO_Queue
+
+// --- CALL_STATE Enum ---
+type CALL_STATE string
+
+const (
+	CALL_STATE_New              CALL_STATE = "NEW"
+	CALL_STATE_InQueue          CALL_STATE = "IN_QUEUE"
+	CALL_STATE_BridgedWithAgent CALL_STATE = "BRIDGED_WITH_AGENT"
+	CALL_STATE_Terminated       CALL_STATE = "TERMINATED"
+)
+
+// --- CALL_SCHEDULED_ACTION Enum ---
+type CALL_SCHEDULED_ACTION string
+
+const (
+	CALL_SCHEDULED_ACTION_QueueTimeout          CALL_SCHEDULED_ACTION = "QUEUE_TIMEOUT"
+	CALL_SCHEDULED_ACTION_ActionAnnounce        CALL_SCHEDULED_ACTION = "ACTION_ANNOUNCE"
+	CALL_SCHEDULED_ACTION_ActionAnnounceTimeout CALL_SCHEDULED_ACTION = "ACTION_ANNOUNCE_TIMEOUT"
+	CALL_SCHEDULED_ACTION_ClientAnnounce        CALL_SCHEDULED_ACTION = "CLIENT_ANNOUNCE"
+	CALL_SCHEDULED_ACTION_PeriodicAnnounce      CALL_SCHEDULED_ACTION = "PERIODIC_ANNOUNCE"
+	CALL_SCHEDULED_ACTION_PositionAnnounce      CALL_SCHEDULED_ACTION = "POSITION_ANNOUNCE"
+)
+
+// --- QE_RESULT Enum ---
+type QE_RESULT string
+
+const (
+	QE_RESULT_MediaServerDisabled    QE_RESULT = "MEDIA_SERVER_DISABLED"
+	QE_RESULT_CallInstantiationError QE_RESULT = "CALL_INSTANTIATION_ERROR"
+	QE_RESULT_AidError               QE_RESULT = "AID_ERROR"
+	QE_RESULT_RedisError             QE_RESULT = "REDIS_ERROR"
+)
+
+// --- QUEUE_RESULT Enum (ID'li) ---
+type QUEUE_RESULT int
+
+const (
+	QUEUE_RESULT_UnknownError           QUEUE_RESULT = 1
+	QUEUE_RESULT_ClientHangup           QUEUE_RESULT = 2
+	QUEUE_RESULT_AgentHangup            QUEUE_RESULT = 3
+	QUEUE_RESULT_AidEngineReject        QUEUE_RESULT = 4
+	QUEUE_RESULT_AidEngineError         QUEUE_RESULT = 5
+	QUEUE_RESULT_Timeout                QUEUE_RESULT = 6
+	QUEUE_RESULT_ActionAnnounceRedirect QUEUE_RESULT = 7
+	QUEUE_RESULT_Abandon                QUEUE_RESULT = 8
+	QUEUE_RESULT_QeRestart              QUEUE_RESULT = 9
+	QUEUE_RESULT_MediaServerDisabled    QUEUE_RESULT = 10
+)
+
+// --- DIAL_STATUS Enum (ID'li) ---
+type DIAL_STATUS int
+
+const (
+	DIAL_STATUS_Answer      DIAL_STATUS = 1
+	DIAL_STATUS_Busy        DIAL_STATUS = 2
+	DIAL_STATUS_Cancel      DIAL_STATUS = 3
+	DIAL_STATUS_Chanunavail DIAL_STATUS = 4
+	DIAL_STATUS_Congestion  DIAL_STATUS = 5
+	DIAL_STATUS_Dontcall    DIAL_STATUS = 6
+	DIAL_STATUS_Invalidargs DIAL_STATUS = 7
+	DIAL_STATUS_Noanswer    DIAL_STATUS = 8
+	DIAL_STATUS_Ringing     DIAL_STATUS = 9
+	DIAL_STATUS_Torture     DIAL_STATUS = 10
+	DIAL_STATUS_Unknown     DIAL_STATUS = 11
+	DIAL_STATUS_Progress    DIAL_STATUS = 12
+)
+
+// --- AID_DISTRIBUTION_STATE Enum ---
+type AID_DISTRIBUTION_STATE string
+
+const (
+	AID_DISTRIBUTION_STATE_Accepted   AID_DISTRIBUTION_STATE = "ACCEPTED"
+	AID_DISTRIBUTION_STATE_Rejected   AID_DISTRIBUTION_STATE = "REJECTED"
+	AID_DISTRIBUTION_STATE_Terminated AID_DISTRIBUTION_STATE = "TERMINATED"
+	AID_DISTRIBUTION_STATE_Dismissed  AID_DISTRIBUTION_STATE = "DISMISSED"
+)
+
+// --- DIALPLAN_CONTEXT Enum ---
+type DIALPLAN_CONTEXT string
+
+const (
+	DIALPLAN_CONTEXT_QeDialAgent DIALPLAN_CONTEXT = "qe_dial_agent"
+	DIALPLAN_CONTEXT_QueueAction DIALPLAN_CONTEXT = "queue_action"
+)
+
+// --- DIALPLAN_VARIABLE Enum ---
+type DIALPLAN_VARIABLE string
+
+const (
+	DIALPLAN_VARIABLE_AgentAnnounce DIALPLAN_VARIABLE = "agentAnnounce"
+	// ... Diğer tüm dialplan değişkenleri buraya eklenmeli
+)
+
+// --- SIP_HEADER Struct ---
+type SIPHeader struct {
+	SequenceValue string
+	HeaderName    string
+}
+
+// SIP_HEADERS map'i, Java enum'un davranışını taklit eder.
+var SIP_HEADERS = map[string]SIPHeader{
+	"DISTRIBUTION_ATTEMPT_NUMBER": {SequenceValue: "99", HeaderName: "X-QE-Distribution-Attempt"},
+	"HOLD_MOH_CLASS":              {SequenceValue: "98", HeaderName: "X-QE-Hold-Moh-Class"},
+	"QUEUE_NAME":                  {SequenceValue: "97", HeaderName: "X-Asterisk-PP-QueueName"},
+	"QUEUE_ID":                    {SequenceValue: "96", HeaderName: "X-Asterisk-PP-QueueId"},
+}
+
+// --- CALL_TERMINATION_REASON Enum ---
+type CALL_TERMINATION_REASON string
+
+const (
+	CALL_TERMINATION_REASON_ClientHangup   CALL_TERMINATION_REASON = "CLIENT_HANGUP"
+	CALL_TERMINATION_REASON_DialPlanHangup CALL_TERMINATION_REASON = "DIAL_PLAN_HANGUP"
+	CALL_TERMINATION_REASON_DeadChannel    CALL_TERMINATION_REASON = "DEAD_CHANNEL"
+)
+
+type CallDistributionAttempt struct {
+	ID            int64       // Long -> int64
+	StartTime     time.Time   // Date -> time.Time
+	EndTime       time.Time   // Date -> time.Time
+	DialTimeout   int         // Integer -> int (Null ihmal edildi)
+	Username      string      // String
+	UserID        int64       // Long -> int64
+	AttemptNumber int64       // Long -> int64
+	DialStatus    DIAL_STATUS // DIAL_STATUS enum -> constants.DIAL_STATUS
 }

@@ -62,7 +62,7 @@ func CustomLog(level LogLevel, format string, v ...interface{}) {
 	if level == LevelFatal {
 		go func() {
 			time.Sleep(5 * time.Second)
-			//os.Exit(1)
+			os.Exit(1)
 		}()
 	}
 }
@@ -117,9 +117,10 @@ func setLogFile() error {
 var logDirectoryChanged = false
 
 // startAsyncLogger: Kanaldan okuyup dosyaya yazan goroutine'i başlatır (Adım 4)
-func startAsyncLogger() {
+func startAsyncLogger() error {
 	if err := setLogFile(); err != nil {
 		log.Fatalf("Log sistemi başlatılamadı: %v", err)
+		return err
 	}
 
 	go func() {
@@ -145,4 +146,6 @@ func startAsyncLogger() {
 			}
 		}
 	}()
+
+	return nil
 }
