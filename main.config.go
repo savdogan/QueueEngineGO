@@ -191,18 +191,9 @@ func handleIntConfig(w http.ResponseWriter, paramName string, valueStr string) {
 	AppConfig.mu.Lock()
 
 	switch paramName {
-	case "RejectedCallMinWaitTime":
-		AppConfig.RejectedCallMinWaitTime = value
-		configUpdated = true
-	case "RejectedCallCleanupCount":
-		AppConfig.RejectedCallCleanupCount = value
-		configUpdated = true
-	case "RejectedCallProcessingInterval":
-		AppConfig.RejectedCallProcessingInterval = value
-		configUpdated = true
-	case "RejectedCallWaitingMinQueueLength":
-		AppConfig.RejectedCallWaitingMinQueueLength = value
-		configUpdated = true
+
+	default:
+		CustomLog(LevelInfo, "%d", value)
 	}
 
 	AppConfig.mu.Unlock()

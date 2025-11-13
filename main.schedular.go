@@ -175,12 +175,12 @@ func (s *Scheduler) executeNextTask() {
 
 	s.mu.Unlock()
 
-	fmt.Printf("[%s] *** İŞ BAŞLATILDI *** CallID: %s, Zaman: %v\n", time.Now().Format("15:04:05.000"), task.CallID, task.ExecuteAt.Format("15:04:05"))
+	//fmt.Printf("[%s] *** İŞ BAŞLATILDI *** CallID: %s, Zaman: %v\n", time.Now().Format("15:04:05.000"), task.CallID, task.ExecuteAt.Format("15:04:05"))
 
 	// İşi yeni bir goroutine içinde çalıştır (Blocking olmaması için)
 	go func() {
 		task.Action()
-		fmt.Printf("[%s] İş Bitti. CallID: %s\n", time.Now().Format("15:04:05.000"), task.CallID)
+		//fmt.Printf("[%s] İş Bitti. CallID: %s\n", time.Now().Format("15:04:05.000"), task.CallID)
 	}()
 
 	// İşi haritadan temizleme adımı:

@@ -1,13 +1,130 @@
 package main
 
 import (
+	"context"
+	"log"
+	"sync"
+	"time"
+
+	_ "github.com/microsoft/go-mssqldb"
+)
+
+// Global Log Seviyesi Değişkeni: CustomLog'un erişimi için config'den buraya aktarılacak
+var cfgMinLogLevel LogLevel
+var AppConfig Config
+
+func main() {
+
+	version := 1
+
+	log.Printf("QueueEngineGO version:%d is starting...", version)
+
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 1. KONFİGÜRASYONU Yükle
+	cfg, err := loadConfig("config.json")
+	if err != nil {
+		log.Printf("Failed to load config: %v", err)
+		return
+	}
+	AppConfig := cfg
+
+	log.Printf("Successed to load config")
+
+	cfgPublisherHostName := getHostname()
+	AppConfig.mu = &sync.RWMutex{}
+	cfgLogDirectory = AppConfig.LogDirectory
+	cfgMinLogLevel = AppConfig.MinLogLevel
+	//redisAddresses := AppConfig.RedisAddresses
+	//redisPassword := AppConfig.RedisPassword
+	//LoadSnapshotOnStart := AppConfig.LoadSnapshotOnStart
+	AppConfig.mu.Lock()
+	AppConfig.PublisherHostName = cfgPublisherHostName
+	AppConfig.Version = version
+	log.Printf("PublisherHostName : %s", AppConfig.PublisherHostName)
+	log.Printf("Version : %d", AppConfig.Version)
+	AppConfig.mu.Unlock()
+
+	log.Printf("Async logging is starting...")
+
+	startAsyncLogger()
+	time.Sleep(5 * time.Second)
+
+	manager := NewClientManager()
+	var wg sync.WaitGroup
+
+	CustomLog(LevelInfo, "Ari connections is starting...")
+	// 3. ARI Bağlantılarını Başlat
+	for _, ariCfg := range AppConfig.AriConnections {
+		wg.Add(1)
+
+		go func(ariCfg AriConfig) {
+			defer wg.Done()
+			if err := runApp(ctx, ariCfg, manager); err != nil {
+				CustomLog(LevelError, "ARI application failed to start for %s: %v", ariCfg.Application, err)
+			}
+		}(ariCfg)
+	}
+
+	// 4. HTTP Sunucusunu Başlat (Config'den portu kullanarak)
+	if AppConfig.HttpServerEnabled {
+		startHttpEnabled(manager)
+	} else {
+		CustomLog(LevelInfo, "HTTP Server is disabled via config.")
+	}
+
+	// 1. SQL Server Bağlantısını KUR (Hata olursa burada durur)
+	sqlInstance := "GAVWSQLTST01.global-bilgi.entp"
+	sqlDB := "gbWebPhone_test"
+	sqlUser := "[GLOBAL-BILGI\\savdogan]" // Kullanıcı bilgisi gerekli değil ancak loglamada tutulabilir
+
+	if err := InitDBConnection(sqlInstance, sqlDB, sqlUser); err != nil {
+		CustomLog(LevelFatal, "Veritabanı bağlantısı kurulamadı: %v", err)
+		return
+	}
+	defer CloseDBConnection() // Uygulama sonlandığında bağlantıyı kapat
+
+	InitQueueManager()
+
+	go func() {
+
+		time.Sleep(5 * time.Second)
+
+		// Kullanım Örneği (Örneğin StasisStart geldikten sonra)
+		queueName := "Yuktesti" // Varsayımsal kuyruk adı
+		queueDef, err := globalQueueManager.GetQueueByName(queueName)
+
+		if err != nil {
+			// Kuyruk tanımı bulunamadı veya DB hatası var
+			CustomLog(LevelError, "Kuyruk tanımı alınamadı: %v, %d", err, queueDef.ID)
+			return
+		}
+
+	}()
+
+	// Uygulamanın çalışmasını sağla
+	wg.Wait()
+	CustomLog(LevelInfo, "All services shut down. Main exiting.")
+}
+
+/*
+
+package main
+
+import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 var AppConfig Config
+
+var pc int64
 
 func main() {
 
@@ -37,6 +154,8 @@ func main() {
 	// Simüle edilecek çağrı sayısı
 	const callCount = 50000
 
+	time.Sleep(3 * time.Second)
+
 	// Planlama işleminin başlangıç süresi
 	startTime := time.Now()
 
@@ -55,9 +174,11 @@ func main() {
 		delay := 1 * time.Second
 
 		scheduler.ScheduleTask(callID, delay, func() {
+			atomic.AddInt64(&pc, 1)
 			// Görev çalıştığında CallID'yi kullanır
 			//fmt.Printf("--- %d nolu işlem %s: %d saniye sonra planlanan iş çalıştı. ---\n", i, callID, delay/time.Second)
-			CustomLog(LevelInfo, "--- %d nolu işlem %s: %d saniye sonra planlanan iş çalıştı. ---\n", i, callID, delay/time.Second)
+			//currentTimeMilli := time.Now().Format("2006/01/02 15:04:05.000")
+			CustomLog(LevelInfo, "--- nolu işlem %d: %s saniye sonra planlanan iş çalıştı. ---%s\n", i, callID, delay/time.Second)
 		})
 	}
 
@@ -65,13 +186,17 @@ func main() {
 	fmt.Printf("Planlama Tamamlandı: %s sürdü.\n", planningDuration)
 	fmt.Println("50000 görev için 20 saniye bekleniyor...")
 
-	// 7 saniye bekleyip programdan çıkmak yerine, 8 saniye bekleyelim ki görevlerin çoğu bitsin
-	time.Sleep(30 * time.Second)
+	for i := 0; i < 20; i++ {
+		time.Sleep(5 * time.Second)
+		fmt.Printf("Başlangıç: %d adet planlı çalıştırıldı...\n", pc)
+	}
 
-	fmt.Println("\nProgram sonlandı.")
+	// 7 saniye bekleyip programdan çıkmak yerine, 8 saniye bekleyelim ki görevlerin çoğu bitsin
+	log.Printf("[SERVER] SYSTEM IS ACTIVE NOW")
+	select {} // Sonsuza kadar çalış
 }
 
-/*
+
 func main() {
 	fmt.Println("=== Go Gecikmeli İş Scheduler Başlatıldı ===")
 	scheduler := NewScheduler()

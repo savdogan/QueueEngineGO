@@ -1,26 +1,48 @@
 {
-  "Environment": "development",
-  "RedisAddresses": [
-    "10.12.135.27:7001",
-    "10.12.135.28:7001",
-    "10.12.135.29:7001",
-    "10.12.135.27:7002",
-    "10.12.135.28:7002",
-    "10.12.135.29:7002",
-    "10.12.135.27:7003",
-    "10.12.135.28:7003",
-    "10.12.135.29:7003"
-  ],
-  "RedisPassword": "foobared",
-  "LoadSnapshotOnStart": false,
-  "MinLogLevel": 4,
-  "RejectedCallMinWaitTime": 5,
-  "RejectedCallCleanupCount": 5,
-  "RejectedCallProcessingInterval": 5,
-  "RejectedCallWaitingMinQueueLength": 100,
-  "publisherHostName": "GB90015176N1",
-  "logDirectory": "logs",
-  "HttpServerEnabled": true,
-  "Version": 20,
-  "HttpPort": 9090
+    "Environment": "Development",
+    "RedisAddresses": [
+        "10.12.135.27:7001",
+        "10.12.135.28:7001",
+        "10.12.135.29:7001",
+        "10.12.135.27:7002",
+        "10.12.135.28:7002",
+        "10.12.135.29:7002",
+        "10.12.135.27:7003",
+        "10.12.135.28:7003",
+        "10.12.135.29:7003"
+    ],
+    "RedisPassword": "foobared",
+    "LoadSnapshotOnStart": false,
+    "MinLogLevel": 4,
+    "publisherHostName": "GB90015176N1",
+    "LogDirectory": "logs",
+    "HttpServerEnabled": true,
+    "Version": 20,
+    "HttpPort": 9091,
+    "ari_connections": [
+        {
+            "Id": "1",
+            "Application": "gbqe-client1-prp",
+            "WebsocketUrl": "ws://10.12.135.33:8088/ari/events",
+            "RestUrl": "http://10.12.135.33:8088/ari",
+            "Username": "ari4java",
+            "Password": "yothere"
+        },
+        {
+            "Id": "2",
+            "Application": "gbqe-client2",
+            "WebsocketUrl": "ws://10.12.135.33:8088/ari/events",
+            "RestUrl": "http://10.12.135.33:8088/ari",
+            "Username": "ari4java",
+            "Password": "yothere"
+        },
+        {
+            "Id": "3",
+            "Application": "gbqe-client1",
+            "WebsocketUrl": "ws://10.14.114.20:8088/ari/events",
+            "RestUrl": "http://10.14.114.20:8088/ari",
+            "Username": "ari4java",
+            "Password": "yothere"
+        }
+    ]
 }

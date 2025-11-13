@@ -1,0 +1,131 @@
+2025/11/13 02:00:11 main.go:54: [INFO] Ari connections is starting...
+2025/11/13 02:00:11 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 02:03:37 main.go:54: [INFO] Ari connections is starting...
+2025/11/13 02:03:37 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 02:03:37 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 02:03:37 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 02:03:37 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 02:03:37 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 02:04:58 main.go:54: [INFO] Ari connections is starting...
+2025/11/13 02:04:58 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 02:04:58 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 02:04:58 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 02:04:58 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 02:04:58 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 02:05:20 main.ari.manager.go:48: [INFO] Client registered and listening: gbqe-client2
+2025/11/13 02:05:20 main.ari.manager.go:48: [INFO] Client registered and listening: gbqe-client1-prp
+2025/11/13 02:45:51 main.go:54: [INFO] Ari connections is starting...
+2025/11/13 02:45:51 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 02:45:51 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 02:45:51 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 02:45:51 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 02:45:51 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 02:45:51 main.ari.manager.go:48: [INFO] Client registered and listening: gbqe-client1-prp
+2025/11/13 02:45:51 main.ari.manager.go:48: [INFO] Client registered and listening: gbqe-client2
+2025/11/13 03:05:06 main.go:55: [INFO] Ari connections is starting...
+2025/11/13 03:05:39 main.go:55: [INFO] Ari connections is starting...
+2025/11/13 03:07:17 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:07:33 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:07:33 main.go:83: [FATAL] Veritabanı bağlantısı kurulamadı: SQL Server'a bağlanırken hata: sql: unknown driver "sqlserver" (forgotten import?)
+2025/11/13 03:09:40 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:10:27 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:10:27 main.go:83: [FATAL] Veritabanı bağlantısı kurulamadı: SQL Server'a bağlanırken hata: sql: unknown driver "sqlserver" (forgotten import?)
+2025/11/13 03:10:27 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 03:10:27 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 03:13:54 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:17:20 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:21:34 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:23:42 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:23:42 main.go:83: [FATAL] Veritabanı bağlantısı kurulamadı: SQL Server'a bağlanırken hata: sql: unknown driver "sqlserver" (forgotten import?)
+2025/11/13 03:23:42 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 03:23:42 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 03:29:40 main.go:57: [INFO] Ari connections is starting...
+2025/11/13 03:35:59 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 03:35:59 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 03:35:59 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 03:35:59 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 03:35:59 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 03:35:59 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 03:36:01 main.go:85: [FATAL] Veritabanı bağlantısı kurulamadı: SQL Server bağlantı testi başarısız: lookup GAVWSQLTST01: no such host
+2025/11/13 03:36:48 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 03:36:48 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 03:36:48 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 03:36:48 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 03:36:48 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 03:36:48 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 03:36:48 main.ari.manager.go:48: [INFO] Client registered and listening: gbqe-client2
+2025/11/13 03:36:48 main.ari.manager.go:48: [INFO] Client registered and listening: gbqe-client1-prp
+2025/11/13 03:36:48 main.dbmanager.go:38: [INFO] SQL Server bağlantısı başarılı.
+2025/11/13 03:47:52 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 03:47:52 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 03:47:52 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 03:47:52 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 03:47:52 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 03:47:52 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 03:48:39 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 03:48:39 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 03:48:39 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 03:48:39 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 03:48:39 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 03:48:39 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 04:16:03 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 04:16:09 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 04:16:09 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 04:16:09 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 04:16:09 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 04:16:03 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 04:16:10 main.dbmanager.go:38: [INFO] SQL Server bağlantısı başarılı.
+2025/11/13 04:18:21 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 04:18:21 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 04:18:24 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 04:18:24 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 04:18:24 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 04:18:24 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 04:18:24 main.dbmanager.go:38: [INFO] SQL Server bağlantısı başarılı.
+2025/11/13 04:18:26 main.dbmanager.go:56: [INFO] Queue önbellek yöneticisi başlatıldı.
+2025/11/13 04:19:07 main.dbmanager.go:76: [DEBUG] Kuyruk tanımı veritabanından çekiliyor: Yuk_Testi
+2025/11/13 04:21:49 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 04:21:55 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 04:21:55 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 04:21:55 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 04:21:55 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 04:21:55 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 04:21:55 main.dbmanager.go:38: [INFO] SQL Server bağlantısı başarılı.
+2025/11/13 04:21:55 main.dbmanager.go:56: [INFO] Queue önbellek yöneticisi başlatıldı.
+2025/11/13 04:23:17 main.dbmanager.go:76: [DEBUG] Kuyruk tanımı veritabanından çekiliyor: Yuk_Testi
+2025/11/13 04:28:35 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 04:28:41 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 04:28:41 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 04:28:41 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 04:28:41 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 04:28:41 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 04:28:41 main.dbmanager.go:38: [INFO] SQL Server bağlantısı başarılı.
+2025/11/13 04:28:41 main.dbmanager.go:56: [INFO] Queue önbellek yöneticisi başlatıldı.
+2025/11/13 04:28:46 main.dbmanager.go:76: [DEBUG] Kuyruk tanımı veritabanından çekiliyor: Yuk_Testi
+2025/11/13 04:38:25 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 04:38:25 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 04:38:25 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 04:38:25 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 04:38:25 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 04:38:25 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 04:38:26 main.dbmanager.go:38: [INFO] SQL Server bağlantısı başarılı.
+2025/11/13 04:38:26 main.dbmanager.go:56: [INFO] Queue önbellek yöneticisi başlatıldı.
+2025/11/13 04:38:31 main.dbmanager.go:76: [DEBUG] Kuyruk tanımı veritabanından çekiliyor: Yuk_Testi
+2025/11/13 04:40:05 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 04:40:05 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 04:40:05 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 04:40:05 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 04:40:05 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 04:40:05 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 04:40:05 main.dbmanager.go:38: [INFO] SQL Server bağlantısı başarılı.
+2025/11/13 04:40:05 main.dbmanager.go:56: [INFO] Queue önbellek yöneticisi başlatıldı.
+2025/11/13 04:40:10 main.dbmanager.go:76: [DEBUG] Kuyruk tanımı veritabanından çekiliyor: Yuk_Testi
+2025/11/13 04:43:29 main.go:59: [INFO] Ari connections is starting...
+2025/11/13 04:43:29 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1-prp
+2025/11/13 04:43:29 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client2
+2025/11/13 04:43:29 main.ari.manager.go:31: [INFO] Connecting to ARI: gbqe-client1
+2025/11/13 04:43:29 main.services.go:15: [INFO] Listening for HTTP requests on :0
+2025/11/13 04:43:29 main.services.go:193: [INFO] [HTTP] Dinleniyor :0 (Metrics)
+2025/11/13 04:43:29 main.dbmanager.go:38: [INFO] SQL Server bağlantısı başarılı.
+2025/11/13 04:43:29 main.dbmanager.go:56: [INFO] Queue önbellek yöneticisi başlatıldı.
+2025/11/13 04:43:34 main.dbmanager.go:76: [DEBUG] Kuyruk tanımı veritabanından çekiliyor: Yuktesti

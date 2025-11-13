@@ -25,20 +25,15 @@ func (writer *ChannelWriter) Write(p []byte) (n int, err error) {
 	}
 }
 
-// Log: Tüm logları bu fonksiyon üzerinden yönlendirir.
-// level: Bu log mesajının seviyesi.
-// format, v: log.Printf ile aynı parametreler.
-func CustomLog(level LogLevel, format string, v ...interface{}) {
-	// 1. Kontrol: Bu log, konfigürasyonda izin verilen minimum seviyeden yüksek mi?
+var cfgLogDirectory string
 
-	AppConfig.mu.RLock()
-	minLogLevel := AppConfig.MinLogLevel
-	AppConfig.mu.RUnlock()
-	if level > minLogLevel {
-		return // İzin verilen seviyeden daha düşük öncelikli, loglama.
+func CustomLog(level LogLevel, format string, v ...interface{}) {
+	// 1. Kontrol: Log seviyesi minimum seviyeden düşük öncelikli mi?
+	if level > cfgMinLogLevel {
+		return
 	}
 
-	// 2. Seviye Etiketi Ekleme (Hata ayıklamayı kolaylaştırır)
+	// 2. Seviye Etiketi Ekleme
 	var levelTag string
 	switch level {
 	case LevelFatal:
@@ -54,23 +49,21 @@ func CustomLog(level LogLevel, format string, v ...interface{}) {
 	case LevelTrace:
 		levelTag = "[TRACE] "
 	default:
-		levelTag = "[???]   "
+		levelTag = "[???]    "
 	}
 
-	// 3. Logu Basma (mevcut asenkron loglama sisteminizi kullanır)
+	// 3. Logu Basma
 	message := levelTag + fmt.Sprintf(format, v...)
 
-	// log.Output'u kullanarak asenkron log kanalına yönlendirir
-	// 2, çağrının CustomLog'dan yapıldığı fonksiyonu işaret eder.
+	// 2, CustomLog'u çağıran fonksiyonu işaret eder.
 	log.Output(2, message)
 
-	// Fatal seviyesinde sistemden çıkış yapılması gerekebilir
+	// Fatal seviyesinde sistemden çıkış yapılması
 	if level == LevelFatal {
 		go func() {
 			time.Sleep(5 * time.Second)
-			os.Exit(1)
+			//os.Exit(1)
 		}()
-
 	}
 }
 
@@ -86,11 +79,8 @@ func setLogFile() error {
 
 	// 2. AppConfig'deki LogDirectory alanını kontrol et
 	// Dizin ismini kontrol ederken trim ile baştaki/sondaki boşlukları temizlemek iyi bir uygulamadır.
-	AppConfig.mu.RLock()
-	logDirectory := AppConfig.LogDirectory
-	AppConfig.mu.RUnlock()
 
-	logDir := logDirectory // Varsayımsal global değişken
+	logDir := cfgLogDirectory // Varsayımsal global değişken
 
 	if logDir != "" {
 		// Dizin ismi mevcutsa, dizin ve dosya adını birleştir
@@ -120,7 +110,6 @@ func setLogFile() error {
 	// Çıktıyı ChannelWriter'a yönlendir (Adım 3)
 	log.SetOutput(&ChannelWriter{})
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.SetFlags(log.Flags() | log.Lmicroseconds)
 
 	return nil
 }

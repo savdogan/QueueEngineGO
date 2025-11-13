@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch file (Dosyayı Başlat)",
+            "type": "go",
+            "request": "launch",
+            "program": "${file}"
+        },
+        {
+            "name": "Launch package (Paketi Başlat)",
+            "type": "go",
+            "request": "launch",
+            "program": "${workspaceFolder}"
+        }
+    ]
+}
