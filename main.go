@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"time"
 
 	_ "github.com/microsoft/go-mssqldb"
@@ -19,6 +20,8 @@ func terminateApplication(sleepTime time.Duration) {
 // Global Log Seviyesi Değişkeni: CustomLog'un erişimi için config'den buraya aktarılacak
 
 func main() {
+
+	runtime.SetBlockProfileRate(1)
 
 	version := 1
 
@@ -67,6 +70,8 @@ func main() {
 	}
 	defer CloseDBConnection() // Uygulama sonlandığında bağlantıyı kapat
 	//------------DB Conncetion Bölümü Bitiş
+
+	InitSchedulerManager()
 
 	InitQueueManager()
 

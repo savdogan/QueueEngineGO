@@ -28,7 +28,7 @@ func isOutboundApplication(applicationName string) bool {
 	return strings.HasPrefix(applicationName, OUTBOUND_ARI_APPLICATION_PREFIX)
 }
 
-func wbpQueueToQueue(wbp WbpQueue) Queue {
+func wbpQueueToQueue(wbp WbpQueue) *Queue {
 	q := Queue{
 		ID:                          wbp.ID,
 		Enabled:                     wbp.Enabled,
@@ -38,6 +38,8 @@ func wbpQueueToQueue(wbp WbpQueue) Queue {
 		ShortAbandonedThreshold:     wbp.ShortAbandonedThreshold,
 		Type:                        wbp.Type,
 	}
+
+	q.mu.Lock()
 
 	// Nullable String alanlar (Valid değilse -> "")
 	q.QueueName = getSimpleString(wbp.QueueName)
@@ -124,7 +126,9 @@ func wbpQueueToQueue(wbp WbpQueue) Queue {
 	q.ResultCodeTimerEnabled = getSimpleBool(wbp.ResultCodeTimerEnabled)
 	q.ActionAnnounceWrongDtmfHandling = getSimpleBool(wbp.ActionAnnounceWrongDtmfHandling)
 
-	return q
+	q.mu.Unlock()
+
+	return &q
 }
 
 func getSimpleString(s sql.NullString) string {
@@ -162,43 +166,11 @@ func getSimpleBool(b sql.NullBool) bool {
 	return false
 }
 
-func logCallInfo(call *Call) {
-
-	var skills string // Sonucun atanacağı değişken
-
-	if len(call.Skills) > 0 {
-		skills = fmt.Sprint(call.Skills)
-	} else {
-		skills = ""
-	}
-
-	CustomLog(LevelInfo, "Call : %+v", call)
-
-	CustomLog(LevelInfo, "New call created. UniqueId: '%s', queue: %s, parentId: '%s', externalId: '%s', "+
-		"spellOutLanguage: %v', priority: %d, preferred agent: '%s', skills: %v, "+
-		"returnOnHangup: %t, positionTimestamp: %d, actionAnnounceProhibition: %t, "+
-		"dialContext: '%s', actionContext: '%s', queueTimeout: %d, scenario: %v, "+
-		"conferenceRoomId: %s",
-
-		call.UniqueId,
-		call.QueueName,
-		call.ParentId,
-		call.ExternalId,
-		call.SpellOutLanguage,
-		call.Priority,
-		call.PreferredAgent,
-		// Slice (dizi) içeriğini yazdırmak için fmt.Sprint kullanılır (Java'daki Arrays.toString karşılığı)
-		skills,
-		call.ReturnOnHangup,
-		call.PositionTimestamp,
-		call.ActionAnnounceProhibition,
-		call.DialContext,
-		call.ActionContext,
-		call.QueueTimeout,
-		call.ApplicationScenario,
-		call.ConferenceRoomId,
-	)
-
+func logCallInfo(call *Call, addedText string) {
+	call.mu.RLock()
+	callJSON, _ := json.MarshalIndent(call, "", "  ")
+	call.mu.RUnlock()
+	CustomLog(LevelInfo, "[CALL]%s, %s", addedText, callJSON)
 }
 
 func parseNonStandardFormat(input string) (map[string]interface{}, error) {

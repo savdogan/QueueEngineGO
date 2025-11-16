@@ -8,9 +8,9 @@ import (
 
 // handleStasisStartMessage, Java kodunun Go dilindeki karşılığıdır.
 
-func handleStasisStartMessage(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle) {
+func handleStasisStartMessage(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle, connectionId string) {
 
-	CustomLog(LevelInfo, "[%s] StasisStart (application: %s, channel: %v, args: %v)", ARI_MESSAGE_LOG_PREFIX, message.Application, message.Channel, message.Args)
+	CustomLog(LevelInfo, "[%s] StasisStart (connectionId : %s, application: %s, channel: %v, args: %v)", ARI_MESSAGE_LOG_PREFIX, connectionId, message.Application, message.Channel, message.Args)
 
 	if message.Channel.ID == "" {
 		log.Printf("ERROR: StasisStart message has no channel: %v", message)
@@ -25,9 +25,9 @@ func handleStasisStartMessage(message *ari.StasisStart, cl ari.Client, h *ari.Ch
 
 	// Client Uygulamasına Giriş
 	if isInboundApplication(message.Application) {
-		OnClientChannelEnter(message, cl, h)
+		OnClientChannelEnter(message, cl, h, connectionId)
 	} else if isOutboundApplication(message.Application) {
-		OnOutboundChannelEnter(message, cl, h)
+		OnOutboundChannelEnter(message, cl, h, connectionId)
 	} else {
 		log.Printf("ERROR: Got StasisStart for unknown ARI application: %s", message.Application)
 	}
@@ -36,7 +36,7 @@ func handleStasisStartMessage(message *ari.StasisStart, cl ari.Client, h *ari.Ch
 // Not: Bu kodun çalışması için, ari.Channel gibi tipleri
 // kullanılan Go ARI kütüphanesine göre doğru bir şekilde ayarlamanız gerekir.
 
-func OnClientChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle) {
+func OnClientChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle, connectionId string) {
 	CustomLog(LevelInfo, "Inbound kanalından giriş yapıldı..")
 
 	call := CreateCall(message, message.Channel.ID, message.Channel.Name, message.Args[0], 1)
@@ -53,18 +53,24 @@ func OnClientChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Channe
 		return
 	}
 
+	key := h.Key()
+
+	if key == nil {
+		CustomLog(LevelError, "Channel Key is nil for Channel ID : %s ", message.Channel.ID)
+		return
+	}
+
+	call.ChannelKey = key
+	call.ConnectionId = connectionId
+
 	//To DO: AID bağlantısını kontrol et  , uygun değilse çağrıyı reddet
 
 	//To DO: Redis Bağlatısını kontrol et  , uygun değilse çağrıyı reddet
 
 	CustomLog(LevelInfo, "[CALL_CREATED] %+v", call)
-	globalCallManager.AddCall(call)
-
-	//To DO : Get DialupPlan , Şimdilik Standart olanı işle
-	globalCallManager.ProcessCall(call)
-
+	go globalCallManager.AddCall(call)
 }
 
-func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle) {
+func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle, connectionId string) {
 	CustomLog(LevelInfo, "Outbound kanalından giriş yapıldı..")
 }

@@ -10,6 +10,7 @@ import (
 )
 
 type Call struct {
+	mu sync.RWMutex `json:"-"` // Call yapısının eşzamanlı erişimi için kilit
 	// --- Veri Alanları (Sayısal, String ve Listeler) ---
 	UniqueId       string  `json:"uniqueId"`
 	ParentId       string  `json:"parentId,omitempty"`
@@ -51,14 +52,18 @@ type Call struct {
 	CurrentDistributionAttempts map[string]CallDistributionAttempt `json:"-"` // Genellikle serileştirilmez
 	FailedPingAttempts          int                                `json:"-"`
 
-	ChannelState             string `json:"channelState,omitempty"`
-	ChannelCallerNumber      string `json:"channelCallerNumber,omitempty"`
-	ChannelCreationtime      string `json:"channelCreationTime,omitempty"`
-	ChannelDialplanExten     string `json:"channelDialplanExten,omitempty"`
-	ChannelDialplanContext   string `json:"channelDialplanContext,omitempty"`
-	ChannelDialplanPriority  int64  `json:"channelDialplanPriority,omitempty"`
-	ChannelDialplanAppName   string `json:"channelDialplanAppName,omitempty"`
-	ChannelDialplanQueueName string `json:"channelDialplanQueueName,omitempty"`
+	ConnectionId string `json:"connectionId,omitempty"`
+
+	ChannelKey               *ari.Key `json:"channelKey,omitempty"`
+	ChannelId                string   `json:"channelId,omitempty"`
+	ChannelState             string   `json:"channelState,omitempty"`
+	ChannelCallerNumber      string   `json:"channelCallerNumber,omitempty"`
+	ChannelCreationtime      string   `json:"channelCreationTime,omitempty"`
+	ChannelDialplanExten     string   `json:"channelDialplanExten,omitempty"`
+	ChannelDialplanContext   string   `json:"channelDialplanContext,omitempty"`
+	ChannelDialplanPriority  int64    `json:"channelDialplanPriority,omitempty"`
+	ChannelDialplanAppName   string   `json:"channelDialplanAppName,omitempty"`
+	ChannelDialplanQueueName string   `json:"channelDialplanQueueName,omitempty"`
 	// ChannelDialplanParentId iki kez tekrar ettiği için birini kullandık.
 	ChannelDialplanParentId         string                  `json:"channelDialplanParentId,omitempty"`
 	ChannelDialplanSpellOutLanguage string                  `json:"channelDialplanSpellOutLanguage,omitempty"`
@@ -68,6 +73,8 @@ type Call struct {
 	CurrentCallScheduleAction       CALL_SCHEDULED_ACTION   `json:"currentCallScheduledAction,omitempty"`
 	WaitingActions                  []CALL_SCHEDULED_ACTION `json:"waitingActions,omitempty"`
 	PeriodicPlayAnnounceCount       int                     `json:"periodicAnnouncePlayCount,omitempty"`
+	PositionAnnouncePlayCount       int                     `json:"positionAnnouncePlayCount,omitempty"`
+	ActionAnnouncePlayCount         int                     `json:"actionAnnouncePlayCount,omitempty"`
 }
 
 type CallSetup struct {
@@ -199,6 +206,7 @@ func InstantiateCall(message *ari.StasisStart, uniqueId string, channel string, 
 	// Loglama (Bu işlevin dışarıda tanımlandığı varsayılmıştır)
 	//TO DO : Logu burada yap....
 	if message.Channel.ID != "" {
+		call.ChannelId = message.Channel.ID
 		call.ChannelName = message.Channel.Name
 		call.ChannelState = message.Channel.State
 		call.ChannelCallerNumber = message.Channel.Caller.Number

@@ -33,7 +33,7 @@ func InitAriConnection(ctx context.Context) {
 	// 3. ARI Bağlantılarını Başlat
 	for _, ariCfg := range AppConfig.AriConnections {
 		go func(ariCfg AriConfig) {
-			if err := runApp(ctx, ariCfg, globalClientManager); err != nil {
+			if err := runApp(ctx, &ariCfg, globalClientManager); err != nil {
 				CustomLog(LevelError, "ARI application failed to start for %s: %v", ariCfg.Application, err)
 			}
 		}(ariCfg)

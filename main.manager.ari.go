@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/CyCoreSystems/ari/v6"
 	"github.com/CyCoreSystems/ari/v6/client/native"
@@ -13,21 +14,21 @@ func NewClientManager() *ClientManager {
 	}
 }
 
-func (cm *ClientManager) AddClient(appName string, cl ari.Client) {
+func (cm *ClientManager) AddClient(connectiondId string, cl ari.Client) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	cm.clients[appName] = cl
+	cm.clients[connectiondId] = cl
 }
 
-func (cm *ClientManager) GetClient(appName string) (ari.Client, bool) {
+func (cm *ClientManager) GetClient(connectiondId string) (ari.Client, bool) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	cl, ok := cm.clients[appName]
+	cl, ok := cm.clients[connectiondId]
 	return cl, ok
 }
 
 // runApp, tek bir ARI bağlantısını kurar ve olayları dinler.
-func runApp(ctx context.Context, cfg AriConfig, manager *ClientManager) error {
+func runApp(ctx context.Context, cfg *AriConfig, manager *ClientManager) error {
 	CustomLog(LevelInfo, "Connecting to ARI: %s", cfg.Application)
 
 	// native.Connect ile ARI bağlantısı kurulur
@@ -50,18 +51,22 @@ func runApp(ctx context.Context, cfg AriConfig, manager *ClientManager) error {
 		return err
 	}
 
+	AppConfig.Mu.Lock()
+	cfg.ConnectionId = fmt.Sprintf("%s-%s-%s", cfg.Id, cfg.Application, asteriskInfo.SystemInfo.EntityID)
+	AppConfig.Mu.Unlock()
+
 	// İstemciyi Yöneticiye Kaydet
-	manager.AddClient(cfg.Application, cl)
+	manager.AddClient(cfg.ConnectionId, cl)
 	CustomLog(LevelInfo, "Client registered and listening: %s", cfg.Application)
 
 	// Olay dinlemesini başlat (bloklamaz)
-	go listenApp(ctx, cl)
+	go listenApp(ctx, cl, cfg.ConnectionId)
 
 	return nil
 }
 
 // handleAriEvent, gelen tüm ARI Event arayüzlerini işler. (Java'daki onSuccess eşleniği)
-func handleAriEvent(msg ari.Event, cl ari.Client) {
+func handleAriEvent(msg ari.Event, cl ari.Client, connectionId string) {
 
 	CustomLog(LevelInfo, "Ari Event : %+v", msg)
 
@@ -80,14 +85,9 @@ func handleAriEvent(msg ari.Event, cl ari.Client) {
 
 	case *ari.StasisStart:
 		CustomLog(LevelInfo, "[%s] StasisStart: Channel %s entered. Args: %v", appName, channelID, v.Args)
-
 		// Kanala özgü işleyiciyi başlat
 		h := cl.Channel().Get(v.Key(ari.ChannelKey, v.Channel.ID))
-
-		go handleStasisStartMessage(msg.(*ari.StasisStart), cl, h)
-
-		go channelHandler(cl, h)
-
+		go handleStasisStartMessage(msg.(*ari.StasisStart), cl, h, connectionId)
 	case *ari.StasisEnd:
 		CustomLog(LevelInfo, "[%s] StasisEnd: Channel %s left.", appName, channelID)
 
@@ -130,7 +130,7 @@ func handleAriEvent(msg ari.Event, cl ari.Client) {
 }
 
 // listenApp, tüm ARI olaylarını dinleyen sonsuz döngüyü çalıştırır.
-func listenApp(ctx context.Context, cl ari.Client) {
+func listenApp(ctx context.Context, cl ari.Client, connectionId string) {
 
 	CustomLog(LevelInfo, "Listen App %s", cl.ApplicationName())
 
@@ -147,7 +147,7 @@ func listenApp(ctx context.Context, cl ari.Client) {
 			}
 
 			// Her olayı ayrı bir goroutine'de işle
-			go handleAriEvent(e, cl)
+			go handleAriEvent(e, cl, connectionId)
 
 		case <-ctx.Done():
 			CustomLog(LevelInfo, "Listener shutting down...")
@@ -166,6 +166,7 @@ func makeCall(cl ari.Client) (h *ari.ChannelHandle, err error) {
 }
 
 // channelHandler, Stasis'e giren her bir kanal için tetiklenir ve o kanalı yönetir.
+/*
 func channelHandler(cl ari.Client, h *ari.ChannelHandle) {
 
 	CustomLog(LevelInfo, "Running channel handler for channel %s , appname : %s", h.ID(), cl.ApplicationName())
@@ -186,3 +187,50 @@ func channelHandler(cl ari.Client, h *ari.ChannelHandle) {
 	h.Hangup() //nolint:errcheck
 	CustomLog(LevelInfo, "Channel %s hung up.", h.ID())
 }
+*/
+
+/*
+
+func startHeartbeatMonitor(client ari.Client) {
+	ticker := time.NewTicker(30 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			// 30 saniyede bir Asterisk'ten basit bir bilgi iste
+			_, err := client.Asterisk().Info(nil)
+
+			if err != nil {
+				// Hata varsa, bağlantı büyük ihtimalle koptu
+				CustomLog(LevelError, "ARI Heartbeat failed. Reconnecting...")
+
+				// Yeniden bağlanma mantığınızı burada çağırın
+				newClient, reconnErr := ReconnectAri(client)
+				if reconnErr == nil {
+					// Yeniden bağlandı, global istemciyi güncelleyin ve bu Goroutine'den çıkın.
+					// (veya yeni istemciyi dinleyecek yeni bir Goroutine başlatın)
+					globalClientManager.ReplaceClient(newClient)
+					return
+				}
+				CustomLog(LevelError, "Failed to reconnect: %v. Retrying...", reconnErr)
+			}
+			// ... Uygulama kapatıldığında çıkış sinyali de buraya eklenebilir
+		}
+	}
+}
+
+// Tahmini Yeniden Bağlanma Fonksiyonu
+func ReconnectAri(oldClient ari.Client) (ari.Client, error) {
+    // 1. Eski bağlantıyı temizle
+    if oldClient != nil {
+        oldClient.Close() // veya Shutdown()
+    }
+
+    // 2. Yeni bağlantıyı kur (main.InitAriConnection içindeki mantığı kullan)
+    newClient, err := ari.Connect(...) // Doğru parametrelerle yeniden bağlantı
+    if err != nil {
+        return nil, err
+    }
+    return newClient, nil
+}
+
+*/

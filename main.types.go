@@ -97,6 +97,7 @@ type WbpQueue struct {
 }
 
 type Queue struct {
+	mu                              sync.RWMutex `json:"-"` // Kuyruk yapısının eşzamanlı erişimi için kilit
 	ID                              int64
 	QueueName                       string
 	QueueDescription                string
@@ -218,6 +219,7 @@ type Config struct {
 }
 
 type AriConfig struct {
+	ConnectionId string `json:"-"`
 	Id           string `json:"Id"`
 	Application  string `json:"Application"`
 	WebsocketURL string `json:"WebsocketUrl"`
