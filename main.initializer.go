@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sync"
+	"time"
 )
 
 // InitQueueManager: Sadece QueueManager nesnesini başlatır.
@@ -25,23 +25,25 @@ func InitQueueManager() {
 	loadingIsOkForQueueDefinition = true
 }
 
-func InitAriConnection(wg *sync.WaitGroup, ctx context.Context) {
+func InitAriConnection(ctx context.Context) {
 
 	globalClientManager = NewClientManager()
 
 	CustomLog(LevelInfo, "Ari connections is starting...")
 	// 3. ARI Bağlantılarını Başlat
 	for _, ariCfg := range AppConfig.AriConnections {
-		wg.Add(1)
-
 		go func(ariCfg AriConfig) {
-			defer wg.Done()
 			if err := runApp(ctx, ariCfg, globalClientManager); err != nil {
 				CustomLog(LevelError, "ARI application failed to start for %s: %v", ariCfg.Application, err)
 			}
 		}(ariCfg)
 	}
 
+}
+
+func InitSchedulerManager() {
+	globalScheduler = NewScheduler()
+	CustomLog(LevelInfo, "Scheduler Manager is started.")
 }
 
 // InitDBConnection, SQL Server bağlantısını kurar ve globalDB'yi ayarlar.
@@ -61,18 +63,53 @@ func InitDBConnection() error {
 	// !!! SÜRÜCÜ ADI "mssql" OLARAK DEĞİŞTİ !!!
 	db, err := sql.Open("mssql", connString)
 	if err != nil {
-		return fmt.Errorf("SQL Server'a bağlanırken hata: %w", err)
+		return fmt.Errorf("[DB] failed to connect to SQL Server: %w", err)
 	}
 
 	if err = db.Ping(); err != nil {
 		db.Close()
-		return fmt.Errorf("SQL Server bağlantı testi başarısız: %w", err)
+		return fmt.Errorf("[DB] SQL Server connection test is failed : %w", err)
 	}
 
 	// Temel bağlantıyı global alana atama
 	globalDB = db
 
-	CustomLog(LevelInfo, "SQL Server bağlantısı başarılı.")
+	CustomLog(LevelInfo, "[DB] SQL Server connection established successfully.")
 	loadingIsOkForDBManager = true
 	return nil
+}
+
+func InitCallManager() {
+	globalCallManager = NewCallManager()
+	CustomLog(LevelInfo, "Çağrı yöneticisi başlatıldı.")
+}
+
+func InitHttpServer() {
+	if AppConfig.HttpServerEnabled {
+		startHttpEnabled()
+	} else {
+		CustomLog(LevelInfo, "HTTP Server is disabled via config.")
+	}
+}
+
+func WaitForServicesReady(ctx context.Context) {
+
+	CustomLog(LevelInfo, "Hizmetlerin hazır olması bekleniyor...")
+
+	for {
+		// 1. Koşul Kontrolü
+		if loadingIsOkForDBManager && loadingIsOkForQueueDefinition {
+			CustomLog(LevelInfo, "\n✅ Tüm gereklilikler (HTTP, DB, QueueDef) sağlandı!")
+			break // Döngüden çık
+		}
+
+		// 2. Durum Raporu (İsteğe bağlı)
+		CustomLog(LevelInfo, "Bekleniyor... DB: %t, QueueDef: %t\n",
+			loadingIsOkForDBManager, loadingIsOkForQueueDefinition)
+
+		// 3. Duraklama
+		// 200 milisaniye bekle
+		time.Sleep(200 * time.Millisecond)
+	}
+
 }

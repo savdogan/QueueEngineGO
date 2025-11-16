@@ -61,8 +61,7 @@ func CustomLog(level LogLevel, format string, v ...interface{}) {
 	// Fatal seviyesinde sistemden çıkış yapılması
 	if level == LevelFatal {
 		go func() {
-			time.Sleep(5 * time.Second)
-			os.Exit(1)
+			terminateApplication(5)
 		}()
 	}
 }
@@ -109,7 +108,7 @@ func setLogFile() error {
 
 	// Çıktıyı ChannelWriter'a yönlendir (Adım 3)
 	log.SetOutput(&ChannelWriter{})
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Llongfile | log.Lmicroseconds)
 
 	return nil
 }

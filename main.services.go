@@ -9,7 +9,8 @@ import (
 	"strings"
 )
 
-func startHttpEnabled(manager *ClientManager) {
+func startHttpEnabled() {
+	manager := globalClientManager
 	go func() {
 		listenAddr := fmt.Sprintf(":%d", AppConfig.HttpPort)
 		CustomLog(LevelInfo, "Listening for HTTP requests on %s", listenAddr)

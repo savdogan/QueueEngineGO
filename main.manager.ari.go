@@ -46,11 +46,8 @@ func runApp(ctx context.Context, cfg AriConfig, manager *ClientManager) error {
 
 	asteriskInfo, err := cl.Asterisk().Info(nil) // nil: varsayılan seçenekler
 	if err != nil {
-		CustomLog(LevelError, "Error %+v", err)
-
+		CustomLog(LevelError, "Error %+v , AsterixInfo : %+v", err, asteriskInfo)
 		return err
-	} else {
-		CustomLog(LevelInfo, "IN %+v", asteriskInfo)
 	}
 
 	// İstemciyi Yöneticiye Kaydet

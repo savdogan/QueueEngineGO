@@ -38,15 +38,31 @@ func handleStasisStartMessage(message *ari.StasisStart, cl ari.Client, h *ari.Ch
 
 func OnClientChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle) {
 	CustomLog(LevelInfo, "Inbound kanalından giriş yapıldı..")
+
 	call := CreateCall(message, message.Channel.ID, message.Channel.Name, message.Args[0], 1)
 
+	//To DO:  Önce ARI bağlantısını kontrol et ,  uygun değilse çağrıyı reddet
+
+	//To DO: Call boş mu
+
 	if call == nil {
+
+		//To DO: Kanalı reject et ...
+
 		CustomLog(LevelInfo, "Call is empty : %s", message.Channel.ID)
 		return
 	}
 
+	//To DO: AID bağlantısını kontrol et  , uygun değilse çağrıyı reddet
+
+	//To DO: Redis Bağlatısını kontrol et  , uygun değilse çağrıyı reddet
+
 	CustomLog(LevelInfo, "[CALL_CREATED] %+v", call)
-	logCallInfo(call)
+	globalCallManager.AddCall(call)
+
+	//To DO : Get DialupPlan , Şimdilik Standart olanı işle
+	globalCallManager.ProcessCall(call)
+
 }
 
 func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle) {

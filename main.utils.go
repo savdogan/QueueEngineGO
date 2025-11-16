@@ -172,6 +172,8 @@ func logCallInfo(call *Call) {
 		skills = ""
 	}
 
+	CustomLog(LevelInfo, "Call : %+v", call)
+
 	CustomLog(LevelInfo, "New call created. UniqueId: '%s', queue: %s, parentId: '%s', externalId: '%s', "+
 		"spellOutLanguage: %v', priority: %d, preferred agent: '%s', skills: %v, "+
 		"returnOnHangup: %t, positionTimestamp: %d, actionAnnounceProhibition: %t, "+

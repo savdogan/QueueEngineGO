@@ -60,10 +60,14 @@ type Call struct {
 	ChannelDialplanAppName   string `json:"channelDialplanAppName,omitempty"`
 	ChannelDialplanQueueName string `json:"channelDialplanQueueName,omitempty"`
 	// ChannelDialplanParentId iki kez tekrar ettiği için birini kullandık.
-	ChannelDialplanParentId         string `json:"channelDialplanParentId,omitempty"`
-	ChannelDialplanSpellOutLanguage string `json:"channelDialplanSpellOutLanguage,omitempty"`
-	Application                     string `json:"application,omitempty"`
-	ChannelName                     string `json:"channelName,omitempty"`
+	ChannelDialplanParentId         string                  `json:"channelDialplanParentId,omitempty"`
+	ChannelDialplanSpellOutLanguage string                  `json:"channelDialplanSpellOutLanguage,omitempty"`
+	Application                     string                  `json:"application,omitempty"`
+	ChannelName                     string                  `json:"channelName,omitempty"`
+	CurrentProcessName              PROCESS_NAME            `json:"currentProcessName,omitempty"`
+	CurrentCallScheduleAction       CALL_SCHEDULED_ACTION   `json:"currentCallScheduledAction,omitempty"`
+	WaitingActions                  []CALL_SCHEDULED_ACTION `json:"waitingActions,omitempty"`
+	PeriodicPlayAnnounceCount       int                     `json:"periodicAnnouncePlayCount,omitempty"`
 }
 
 type CallSetup struct {
@@ -204,6 +208,8 @@ func InstantiateCall(message *ari.StasisStart, uniqueId string, channel string, 
 	}
 
 	call.Application = message.Application
+
+	call.CurrentCallScheduleAction = CALL_SCHEDULED_ACTION_Empty
 
 	return call
 

@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
 	"time"
 
 	_ "github.com/microsoft/go-mssqldb"
 )
+
+func terminateApplication(sleepTime time.Duration) {
+	log.Printf("Uygulama için exit komutu çağırıldı.....")
+	time.Sleep(sleepTime * time.Second)
+	os.Exit(1)
+}
 
 // Global Log Seviyesi Değişkeni: CustomLog'un erişimi için config'den buraya aktarılacak
 
@@ -18,8 +23,6 @@ func main() {
 	version := 1
 
 	log.Printf("QueueEngineGO version:%d is starting...", version)
-
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -44,7 +47,6 @@ func main() {
 	AppConfig.PublisherHostName = cfgPublisherHostName
 	AppConfig.Version = version
 	log.Printf("PublisherHostName : %s", AppConfig.PublisherHostName)
-	log.Printf("Version : %d", AppConfig.Version)
 	AppConfig.Mu.Unlock()
 
 	//------------LOG Bölümü Başlangıç
@@ -52,7 +54,7 @@ func main() {
 	err = startAsyncLogger()
 	if err != nil {
 		log.Printf("Logging starting is failed.")
-		os.Exit(1)
+		terminateApplication(5)
 	}
 	log.Printf("Async logging is started")
 	//------------LOG Bölümü Başlangıç
@@ -60,45 +62,23 @@ func main() {
 	//------------DB Conncetion Bölümü Başlangıç
 	if err := InitDBConnection(); err != nil {
 		CustomLog(LevelFatal, "Veritabanı bağlantısı kurulamadı: %v", err)
-		os.Exit(1)
+		terminateApplication(5)
 		return
 	}
 	defer CloseDBConnection() // Uygulama sonlandığında bağlantıyı kapat
 	//------------DB Conncetion Bölümü Bitiş
 
-	var wg sync.WaitGroup
-
 	InitQueueManager()
 
-	//------------HTTP sunucuus başlangıç
-	if AppConfig.HttpServerEnabled {
-		startHttpEnabled(globalClientManager)
-	} else {
-		CustomLog(LevelInfo, "HTTP Server is disabled via config.")
-	}
-	//------------HTTP sunucuus bitiş
+	InitCallManager()
 
-	CustomLog(LevelInfo, "Hizmetlerin hazır olması bekleniyor...")
+	InitHttpServer()
 
-	for {
-		// 1. Koşul Kontrolü
-		if loadingIsOkForDBManager && loadingIsOkForQueueDefinition {
-			CustomLog(LevelInfo, "\n✅ Tüm gereklilikler (HTTP, DB, QueueDef) sağlandı!")
-			break // Döngüden çık
-		}
+	WaitForServicesReady(ctx)
 
-		// 2. Durum Raporu (İsteğe bağlı)
-		CustomLog(LevelInfo, "Bekleniyor... DB: %t, QueueDef: %t\n",
-			loadingIsOkForDBManager, loadingIsOkForQueueDefinition)
+	fmt.Println("[ARI CONNECTION] is starting...")
 
-		// 3. Duraklama
-		// 200 milisaniye bekle
-		time.Sleep(200 * time.Millisecond)
-	}
-
-	fmt.Println("Uygulama ana işleme devam ediyor.")
-
-	InitAriConnection(&wg, ctx)
+	InitAriConnection(ctx)
 
 	go func() {
 
@@ -114,8 +94,9 @@ func main() {
 
 	}()
 
-	// Uygulamanın çalışmasını sağla
-	wg.Wait()
+	for range make(chan struct{}) {
+	} // Sonsuza kadar çalış
+	time.Sleep(5 * time.Second)
 	CustomLog(LevelInfo, "All services shut down. Main exiting.")
 }
 
