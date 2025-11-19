@@ -49,12 +49,14 @@ type Call struct {
 	QueueTimeout              int    `json:"queueTimeout,omitempty"`
 	ConferenceRoomId          string `json:"conferenceRoomId,omitempty"`
 	IvrIteration              int    `json:"ivrIteration,omitempty"`
+	ConnectedAgentChannelID   string `json:"connectedAgentChannelID,omitempty"`
+
+	IsCallInDistribution bool `json:"isCallInDistribution,omitempty"`
 
 	// --- Eşzamanlılık Alanları (JSON'dan hariç tutulur) ---
-	lock                        sync.Mutex                         `json:"-"`
-	DistributionAttemptNumber   int64                              `json:"distributionAttemptNumber,omitempty"`
-	CurrentDistributionAttempts map[string]CallDistributionAttempt `json:"-"` // Genellikle serileştirilmez
-	FailedPingAttempts          int                                `json:"-"`
+	lock                      sync.Mutex `json:"-"`
+	DistributionAttemptNumber int64      `json:"distributionAttemptNumber,omitempty"`
+	FailedPingAttempts        int        `json:"-"`
 
 	ChannelKey               *ari.Key `json:"channelKey,omitempty"`
 	ChannelId                string   `json:"channelId,omitempty"`

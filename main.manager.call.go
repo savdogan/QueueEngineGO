@@ -4,19 +4,22 @@ import (
 	"fmt"
 	_ "net/http/pprof"
 	"time"
+
+	"github.com/CyCoreSystems/ari/v6"
 )
 
 // NewCallManager, CallManager'ın güvenli bir örneğini oluşturur ve başlatır.
 func NewCallManager() *CallManager {
 	return &CallManager{
-		calls: make(map[string]*Call),
+		calls:       make(map[string]*Call),
+		outChannels: make(map[string]*ari.ChannelHandle),
 	}
 }
 
 // --- İŞLEM METOTLARI ---
 
-// AddCall, yeni bir Call nesnesini yöneticinin listesine ekler.
-func (cm *CallManager) AddCall(call *Call) {
+// processNewInboundCall, yeni bir Call nesnesini yöneticinin listesine ekler.
+func (cm *CallManager) processNewInboundCall(call *Call) {
 	// Yazma işlemi olduğu için tam kilit (Lock) kullanıyoruz
 	cm.mu.Lock()
 	cm.calls[call.UniqueId] = call
@@ -24,19 +27,19 @@ func (cm *CallManager) AddCall(call *Call) {
 
 	logCallInfo(call, fmt.Sprintf("[ADDED]: %s , Call Manager Calls Count : %d", call.UniqueId, len(cm.calls)))
 
-	go globalCallManager.ProcessCall(call)
+	go globalCallManager.processCall(call)
 
 }
 
-func (cm *CallManager) ProcessCall(call *Call) {
+func (cm *CallManager) processCall(call *Call) {
 	// Yazma işlemi olduğu için tam kilit (Lock) kullanıyoruz
 
 	//To DO: burada konference nasıl seçeceğiz
-	cm.QueueProcessStart(call)
+	cm.queueProcessStart(call)
 
 }
 
-func (cm *CallManager) QueueProcessStart(call *Call) {
+func (cm *CallManager) queueProcessStart(call *Call) {
 
 	call.mu.Lock()
 	call_UniqueuId := call.UniqueId
@@ -92,7 +95,7 @@ func (cm *CallManager) QueueProcessStart(call *Call) {
 	call.State = CALL_STATE_InQueue
 	call.mu.Unlock()
 
-	err = PublishNewInterActionMessage(NewCallInteraction{
+	err = PublishNewInteractionMessage(NewCallInteraction{
 		Groups:              []int{},
 		InstanceID:          call_InstanceID,
 		InteractionID:       call_UniqueuId,
@@ -112,343 +115,103 @@ func (cm *CallManager) QueueProcessStart(call *Call) {
 
 }
 
-func isCallAvailForNextAction(call *Call, action CALL_SCHEDULED_ACTION) bool {
-	//To DO : Checck Active Announce Processes for Call
-	call.mu.Lock()
-	defer call.mu.Unlock()
-	if call.CurrentCallScheduleAction == CALL_SCHEDULED_ACTION_Empty {
-		return true
-	}
-	call.WaitingActions = append(call.WaitingActions, action)
-	return false
-}
-
-func processQueueAction(call_UniqueId string, action CALL_SCHEDULED_ACTION) {
-
-	switch action {
-	case CALL_SCHEDULED_ACTION_QueueTimeout:
-		globalCallManager.runActionQueueTimeOut(call_UniqueId)
-	case CALL_SCHEDULED_ACTION_ClientAnnounce:
-		globalCallManager.runActionClientAnnounce(call_UniqueId)
-	case CALL_SCHEDULED_ACTION_PeriodicAnnounce:
-		globalCallManager.runActionPeriodicAnnounce(call_UniqueId)
-	default:
-		CustomLog(LevelWarn, "Unknown scheduled action: %s for Call: %s", action, call_UniqueId)
-	}
-}
-
-func (cm *CallManager) runActionQueueTimeOut(call_UniqueId string) {
-
-	CustomLog(LevelDebug, "Processing Queue Timeout for Call: %s", call_UniqueId)
-
-	call, found := cm.GetCall(call_UniqueId)
-
-	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
-		return
-	}
-
-	call.mu.RLock()
-	call_State := call.State
-	call.mu.RUnlock()
-
-	if call_State != CALL_STATE_InQueue {
-		CustomLog(LevelDebug, "[CALL_PROCESS_INFO] call is not waiting , so queue wait time action ignored, call id : %s", call_UniqueId)
-		return
-	}
-
-	//To DO : Terminate Call Aksiyonları
-
-}
-
-func (cm *CallManager) runActionClientAnnounce(call_UniqueId string) {
-
-	CustomLog(LevelDebug, "Processing Client Announce for Call: %s", call_UniqueId)
-
-	call, found := cm.GetCall(call_UniqueId)
-
-	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
-		return
-	}
-
-	if !isCallAvailForNextAction(call, CALL_SCHEDULED_ACTION_ClientAnnounce) {
-		return
-	}
-
-	call.mu.Lock()
-	call.CurrentCallScheduleAction = CALL_SCHEDULED_ACTION_ClientAnnounce
-	call.mu.Unlock()
-	//To DO: Buraya şimdi aksiyon yazılacak
-
-}
-
-func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
-
-	CustomLog(LevelDebug, "Processing Periodic Announce for Call: %s", call_UniqueId)
-
-	call, found := cm.GetCall(call_UniqueId)
-
-	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
-		return
-	}
-
-	if !isCallAvailForNextAction(call, CALL_SCHEDULED_ACTION_PeriodicAnnounce) {
-		return
-	}
-
-	call.mu.RLock()
-	call_QueueName := call.QueueName
-	call_PeriodicPlayAnnounceCount := call.PeriodicPlayAnnounceCount
-	call.mu.RUnlock()
-
-	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
-
-	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call.UniqueId, call.QueueName)
-		return
-	}
-
-	currentQueue.mu.RLock()
-	queue_PeriodicAnnounce := currentQueue.PeriodicAnnounce
-	queue_PeriodicAnnounceMaxPlayCount := currentQueue.PeriodicAnnounceMaxPlayCount
-	currentQueue.mu.RUnlock()
-
-	if queue_PeriodicAnnounce == "" {
-		CustomLog(LevelDebug, "Queue Periodic Announce is empty , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	if call_PeriodicPlayAnnounceCount >= int(queue_PeriodicAnnounceMaxPlayCount) {
-		CustomLog(LevelDebug, "Queue Periodic Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	call.mu.Lock()
-	call.CurrentCallScheduleAction = CALL_SCHEDULED_ACTION_PeriodicAnnounce
-	call.mu.Unlock()
-
-	//To DO: Buraya şimdi aksiyon yazılacak
-
-}
-
-// OK
-func (cm *CallManager) setupPeriodicAnnounce(call_UniqueId string) {
-
-	CustomLog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
-
-	call, found := cm.GetCall(call_UniqueId)
-
-	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
-		return
-	}
-
-	call.mu.RLock()
-	call_QueueName := call.QueueName
-	call_PeriodicAnnouncePlayCount := call.PeriodicPlayAnnounceCount
-	call.mu.RUnlock()
-
-	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
-
-	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	currentQueue.mu.RLock()
-	queue_PeriodicAnnounce := currentQueue.PeriodicAnnounce
-	queue_PeriodicAnnouncePlayCount := currentQueue.PeriodicAnnounceMaxPlayCount
-	queue_PeriodicAnnounceInitialDelay := currentQueue.PeriodicAnnounceInitialDelay
-	currentQueue.mu.RUnlock()
-
-	if queue_PeriodicAnnounce == "" {
-		CustomLog(LevelDebug, "Queue Periodic Announce is empty , so Periodic Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	if call_PeriodicAnnouncePlayCount >= int(queue_PeriodicAnnouncePlayCount) {
-		CustomLog(LevelDebug, "Queue Periodic Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	initialDelay := time.Duration(queue_PeriodicAnnounceInitialDelay) * time.Second
-
-	globalScheduler.ScheduleTask(call_UniqueId, initialDelay, func() {
-		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_PeriodicAnnounce)
-	})
-
-	CustomLog(LevelDebug, "Setup scheduled Periodic Announce after %d seconds for Call: %s", queue_PeriodicAnnounceInitialDelay, call_UniqueId)
-
-}
-
-// OK
-func (cm *CallManager) setupPositionAnnounce(call_UniqueId string) {
-
-	CustomLog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
-
-	call, found := cm.GetCall(call_UniqueId)
-
-	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
-		return
-	}
-
-	call.mu.RLock()
-	call_QueueName := call.QueueName
-	call_PositionAnnouncePlayCount := call.PositionAnnouncePlayCount
-	call.mu.RUnlock()
-
-	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
-
-	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	currentQueue.mu.RLock()
-	queue_PositionAnnounceIsActive := currentQueue.ReportPosition
-	queue_PositionAnnouncePlayCount := 1000
-	queue_PositionAnnounceInitialDelay := currentQueue.PositionAnnounceInitialDelay
-	queue_PositionReportHoldTimeIsActive := currentQueue.ReportHoldTime
-	currentQueue.mu.RUnlock()
-
-	if !queue_PositionAnnounceIsActive && !queue_PositionReportHoldTimeIsActive {
-		CustomLog(LevelDebug, "Queue Position Announce setup skipped , Because : queue_PositionAnnounceIsActive and queue_PositionReportHoldTimeIsActive  are false: call id :  %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	if call_PositionAnnouncePlayCount >= int(queue_PositionAnnouncePlayCount) {
-		CustomLog(LevelDebug, "Queue Position Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	initialDelay := time.Duration(queue_PositionAnnounceInitialDelay) * time.Second
-
-	globalScheduler.ScheduleTask(call_UniqueId, initialDelay, func() {
-		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_PositionAnnounce)
-	})
-
-	CustomLog(LevelDebug, "Setup scheduled Position Announce after %d seconds for Call: %s", queue_PositionAnnounceInitialDelay, call_UniqueId)
-
-}
-
-// OK
-func (cm *CallManager) setupActionAnnounce(call_UniqueId string) {
-
-	CustomLog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
-
-	call, found := cm.GetCall(call_UniqueId)
-
-	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
-		return
-	}
-
-	call.mu.RLock()
-	call_QueueName := call.QueueName
-	call_ActionAnnouncePlayCount := call.ActionAnnouncePlayCount
-	call_ActionAnnounceProhibition := call.ActionAnnounceProhibition
-	call.mu.RUnlock()
-
-	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
-
-	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	currentQueue.mu.RLock()
-	queue_ActionAnnounceSoundFile := currentQueue.ActionAnnounceSoundFile
-	queue_ActionAnnounceMaxPlayCount := currentQueue.ActionAnnounceMaxPlayCount
-	queue_ActionAnnounceInitialDelay := currentQueue.ActionAnnounceInitialDelay
-	currentQueue.mu.RUnlock()
-
-	if queue_ActionAnnounceMaxPlayCount == 0 || call_ActionAnnounceProhibition {
-		CustomLog(LevelDebug, "Queue Action Announce is not active or Action Announce Prohibition is true , so Action Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	if queue_ActionAnnounceSoundFile == "" {
-		CustomLog(LevelDebug, "Queue Action Announce Sound File is empty , so Action Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	if call_ActionAnnouncePlayCount >= int(queue_ActionAnnounceMaxPlayCount) {
-		CustomLog(LevelDebug, "Queue Action Announce max play count reached , so Action Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
-		return
-	}
-
-	initialDelay := time.Duration(queue_ActionAnnounceInitialDelay) * time.Second
-
-	globalScheduler.ScheduleTask(call_UniqueId, initialDelay, func() {
-		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_ActionAnnounce)
-	})
-
-	CustomLog(LevelDebug, "Setup scheduled Action Announce after %d seconds for Call: %s", queue_ActionAnnounceInitialDelay, call_UniqueId)
-
-}
-
-// TerminateCall, verilen çağrıyı güvenli bir şekilde sonlandırır ve kaynakları temizler.
-func (cm *CallManager) TerminateCall(call *Call, terminationReason CALL_TERMINATION_REASON) {
+// terminateCall, verilen çağrıyı güvenli bir şekilde sonlandırır ve kaynakları temizler.
+func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINATION_REASON) {
 	// 1. Kilitleme (Java'daki call.lock() eşleniği)
-	call.mu.Lock()
-	defer call.mu.Unlock() // Kilidi try-finally bloğu gibi her durumda serbest bırak
+	call.mu.RLock()
+	call_UniqueId := call.UniqueId
+	call_state := call.State
+	call_InstanceID := call.InstanceID
+	call_QueueName := call.QueueName
+	call_Bridge := call.Bridge
+	call_BridgedChannel := call.BridgedChannel
+	call_connectionName := call.ConnectionName
+	call_ConnectedAgentChannelID := call.ConnectedAgentChannelID
+	call.mu.RUnlock() // Kilidi try-finally bloğu gibi her durumda serbest bırak
 
 	// 2. Durum Kontrolü
-	if call.State == CALL_STATE_Terminated {
-		CustomLog(LevelDebug, "[%s] Call already terminated. No action taken.", call.UniqueId)
+
+	call.mu.Lock()
+	if call_state == CALL_STATE_Terminated {
+		CustomLog(LevelDebug, "[%s] Call already terminated. No action taken.", call_UniqueId)
+		call.mu.Unlock()
 		return // Zaten sonlanmışsa, hiçbir şey yapma
 	}
+	call.State = CALL_STATE_Terminated
+	call.TerminationReason = terminationReason
+	call.mu.Unlock()
 
 	// 3. Loglama ve Durumu Güncelleme
 	// log.info("[{}] Terminated: {}", call.getUniqueId(), call);
-	CustomLog(LevelInfo, "[%s] Terminated: %s. Reason: %s", call.UniqueId, call.String(), terminationReason)
 
-	call.State = CALL_STATE_Terminated
-	call.TerminationReason = terminationReason
+	CustomLog(LevelInfo, "[%s] Terminated. Reason: %s", call_UniqueId, terminationReason)
 
 	// 4. Zamanlanmış Görevleri İptal Etme (Scheduler Manager kullanımı)
 	// call.getScheduledActions().values().forEach(a -> a.cancel(true));
 
 	// globalScheduler'ı kullanarak UniqueId'ye ait tüm görevleri iptal et.
-	globalScheduler.CancelByCallID(call.UniqueId)
-	CustomLog(LevelDebug, "[%s] All scheduled tasks cancelled.", call.UniqueId)
+	globalScheduler.CancelByCallID(call_UniqueId)
+	CustomLog(LevelDebug, "[%s] All scheduled tasks cancelled.", call_UniqueId)
 
-	// 5. Köprüyü İptal Etme (Bridge'i Temizleme)
-	// if (call.getBridge() != null) { ariFacade.destroyBridge(call, call.getBridge()).subscribe(); }
+	logCallInfo(call, "--------------------------terminateCall--------------")
 
-	if call.Bridge != "" { // String olduğu için boş string kontrolü yapılır.
-		// To DO: ARI üzerinden köprüyü yok etme mantığı buraya gelir.
-		// globalClientManager üzerinden ARI istemcisine erişilmelidir.
-		// Örneğin: destroyBridge(call, call.Bridge)
-		CustomLog(LevelInfo, "[%s] Destroying bridge: %s", call.UniqueId, call.Bridge)
+	ariClient, found := globalClientManager.GetClient(call_connectionName)
+	if found {
+		if call_BridgedChannel != "" {
+			agentChannelHandle := ariClient.Channel().Get(ari.NewKey(ari.ChannelKey, call_BridgedChannel))
+			if agentChannelHandle.ID() != "" {
+				CustomLog(LevelDebug, "Agent channel is deleting %s", call_BridgedChannel)
+				err := agentChannelHandle.Hangup()
+				if err != nil {
+					CustomLog(LevelError, "Error while agentChannelHandle Hangup the agent channel : %s , error : %+v ", call_BridgedChannel, err)
+				}
+			}
+		}
+		if call_Bridge != "" {
+			bridgeKey := ari.NewKey(ari.BridgeKey, call_Bridge)
+			bridgeHandle := ariClient.Bridge().Get(bridgeKey)
+			if bridgeHandle.ID() != "" {
+				CustomLog(LevelDebug, "Bridge is deleting %s", call_Bridge)
+				err := bridgeHandle.Delete()
+				if err != nil {
+					CustomLog(LevelError, "Error while deleting the bridge : %s , error : %+v ", call_Bridge, err)
+				}
+			}
+		}
+		if call_ConnectedAgentChannelID != "" && call_ConnectedAgentChannelID != call_BridgedChannel {
+			agentChannelHandle := ariClient.Channel().Get(ari.NewKey(ari.ChannelKey, call_ConnectedAgentChannelID))
+			if agentChannelHandle.ID() != "" {
+				CustomLog(LevelDebug, "Agent channel(ConnectedAgentChannelID) is deleting %s", call_ConnectedAgentChannelID)
+				err := agentChannelHandle.Hangup()
+				if err != nil {
+					CustomLog(LevelError, "Error while agentChannelHandle Hangup(ConnectedAgentChannelID) the agent channel : %s , error : %+v ", call_ConnectedAgentChannelID, err)
+				}
+			}
+		}
+	} else {
+		CustomLog(LevelError, "Ari Client not found in terminate call %s", call_UniqueId)
 	}
 
-	// 6. Dağıtım Denemesi Kanallarını Kapatma (Hangup)
-	// call.getCurrentDistributionAttempts().keySet().forEach(c -> ariFacade.hangup(call, c).subscribe());
+	cm.RemoveCall(call_UniqueId)
 
-	// map'i kilitlemeye gerek yok, çünkü lock zaten aktif.
-	// Ancak map'teki kanallar için hangup çağırmalıyız.
-	for channelID := range call.CurrentDistributionAttempts {
-		// To DO: ARI üzerinden kanalı kapatma mantığı buraya gelir.
-		// Örneğin: hangupChannel(call.ConnectionId, channelID)
-		CustomLog(LevelDebug, "[%s] Hanging up distribution channel: %s", call.UniqueId, channelID)
-	}
+	go func() {
+		PublishInteractionStateMessage(InteractionState{
+			InteractionID:        call_UniqueId,
+			InstanceID:           call_InstanceID,
+			RelatedAgentUsername: "",
+			State:                string(CALL_STATE_Terminated),
+			QueueName:            call_QueueName,
+		})
+	}()
 
-	// --- Kilit Bırakıldı (defer call.Unlock() sayesinde) ---
-
-	// 7. Çağrıyı Yöneticiden Kaldırma (CallManager metodu)
-	cm.RemoveCall(call.UniqueId)
 }
 
-// OnAidDistributionMessage, AID'den gelen dağıtım isteğini işler.
-func (cm *CallManager) OnAidDistributionMessage(call *Call, message *RedisCallDistributionMessage) {
+// onAidDistributionMessage, AID'den gelen dağıtım isteğini işler.
+func (cm *CallManager) onAidDistributionMessage(call *Call, message *RedisCallDistributionMessage) {
 	call.mu.Lock() // Kilitleme
 
 	// 1. Durum Kontrolü
-	if len(call.CurrentDistributionAttempts) > 0 {
+	if call.IsCallInDistribution {
 		CustomLog(LevelWarn, "[%s] Got new distribution request while executing the previous one. Ignoring...", call.UniqueId)
 		call.mu.Unlock()
 		return
@@ -495,23 +258,10 @@ func (cm *CallManager) startDistributionAttempt(call *Call, user UserDist, attem
 	// 1. Kanal ID Oluşturma
 	channelID := fmt.Sprintf("%s-agent-%s-%d", call.UniqueId, user.Username, attemptNumber)
 
-	// 2. Attempt Nesnesini Oluşturma
-	attempt := CallDistributionAttempt{
-		UserID:        user.ID,
-		Username:      user.Username,
-		DialTimeout:   dialTimeout,
-		AttemptNumber: attemptNumber,
-		StartTime:     time.Now(),
-	}
-
 	// 3. Call Struct'ına Ekleme (Kilit gerekli)
 	call.mu.Lock()
-	if call.CurrentDistributionAttempts == nil {
-		// Haritanın değer tipini 'attempt' değişkeninin tipine göre ayarlayın.
-		// (Örn: map[string]int veya map[string]*AttemptStruct)
-		call.CurrentDistributionAttempts = make(map[string]CallDistributionAttempt)
-	}
-	call.CurrentDistributionAttempts[channelID] = attempt
+	call.IsCallInDistribution = true
+	call.ConnectedAgentId = user.ID
 	call.mu.Unlock()
 
 	// 4. Cache/Redis Güncelleme
@@ -524,115 +274,9 @@ func (cm *CallManager) startDistributionAttempt(call *Call, user UserDist, attem
 	err := OriginateAgentChannel(call, user, dialTimeout, channelID)
 
 	if err != nil {
-		// Java'daki doOnError eşleniği: Originate başarısız olursa
-		// Varsayılan olarak DIAL_STATUS_Chanunavail kullanıyoruz, ancak Java'da UNKNOWN kullanılmış.
-		cm.handleFailedDistributionAttempt(call, channelID, DIAL_STATUS_Unknown)
+		clearCallProperties(call, nil)
 	}
 
 	// NOT: Java'daki .timeout() ve .subscribe() mantığı, Go'da ARI olayları dinleyicisinde (listenApp)
 	// ve Scheduler'ınızda (zamanlayıcı) yönetilmelidir.
-}
-
-// handleFailedDistributionAttempt, başarısız bir denemeyi işler (Java'daki lambda fonksiyonu eşleniği).
-func (cm *CallManager) handleFailedDistributionAttempt(call *Call, channelID string, status DIAL_STATUS) {
-	CustomLog(LevelError, "[%s] Originate failed for channel %s. Status: %d", call.UniqueId, channelID, status)
-
-	call.mu.Lock()
-	defer call.mu.Unlock()
-
-	// Denemeyi al, güncelle ve map'ten kaldır
-	if attempt, ok := call.CurrentDistributionAttempts[channelID]; ok {
-		attempt.EndTime = time.Now()
-		attempt.DialStatus = status
-		// Not: Map'e geri atama yapısı pointer olmadığı için, attempt'in kendisi güncellenmez.
-		// Bu yüzden tüm struct'ı güncellemek gerekir:
-		call.CurrentDistributionAttempts[channelID] = attempt
-	}
-
-	delete(call.CurrentDistributionAttempts, channelID)
-
-	// Hata ayıklama veya yeniden deneme mantığı buradan devam eder.
-}
-
-/*
-
-func (cm *CallManager) startMoh(call *Call) error {
-
-	globalQueueManager.mu.RLock()
-	defer globalQueueManager.mu.RUnlock()
-
-	globalClientManager.mu.Lock()
-	defer globalClientManager.mu.Unlock()
-
-	currentQueue, err := globalQueueManager.GetQueueByName(call.QueueName)
-
-	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call.UniqueId, call.QueueName)
-		return err
-	}
-
-	musicClass := currentQueue.MusicClass
-	if musicClass == "" {
-		musicClass = "Default"
-		CustomLog(LevelDebug, "currentQueue.MusicClass is empty. Using Default MOH Class for Call Moh Start , Call Id : %s", call.UniqueId)
-	}
-
-	ariClient, found := globalClientManager.GetClient(call.ConnectionId)
-
-	if !found {
-		CustomLog(LevelError, "ARI Client not found for Call Moh Start , Call Application : %s , Call Id : %s", call.Application, call.UniqueId)
-		return fmt.Errorf("ARI Client not found for Call Moh Start , Call Application : %s , Call Id : %s", call.Application, call.UniqueId)
-	}
-
-	ch := ariClient.Channel().Get(call.ChannelKey)
-
-	err = ch.MOH(musicClass)
-	if err != nil {
-		CustomLog(LevelError, "Error starting MOH for Call Id : %s , Error : %+v", call.UniqueId, err)
-		return err
-	}
-
-	return nil
-}
-*/
-
-// GetCall, UniqueId kullanarak bir Call nesnesini döndürür.
-// Eşzamanlı okuma için uygundur.
-func (cm *CallManager) GetCall(uniqueId string) (*Call, bool) {
-	// Okuma işlemi olduğu için okuma kilidi (RLock) kullanıyoruz
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	call, ok := cm.calls[uniqueId]
-	return call, ok
-}
-
-// RemoveCall, bir Call nesnesini UniqueId kullanarak listeden siler.
-func (cm *CallManager) RemoveCall(uniqueId string) {
-	// Yazma işlemi olduğu için tam kilit (Lock) kullanıyoruz
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	delete(cm.calls, uniqueId)
-	// CustomLog(constants.LevelInfo, "Call removed: %s", uniqueId)
-}
-
-// GetAllCalls, anlık olarak aktif tüm çağrıların bir listesini döndürür.
-// Büyük çağrı sayıları için dikkatli kullanılmalıdır.
-func (cm *CallManager) GetAllCalls() []*Call {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	list := make([]*Call, 0, len(cm.calls))
-	for _, call := range cm.calls {
-		list = append(list, call)
-	}
-	return list
-}
-
-// GetCount, aktif çağrı sayısını döndürür.
-func (cm *CallManager) GetCount() int {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-	return len(cm.calls)
 }

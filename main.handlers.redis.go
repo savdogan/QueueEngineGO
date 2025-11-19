@@ -37,11 +37,11 @@ func handleOnAidDistributionMessage(payload string) {
 
 	CustomLog(LevelInfo, "[AID_DIST] Çağrı bulundu %s", payload)
 
-	go globalCallManager.OnAidDistributionMessage(call, &rcdMessage)
+	go globalCallManager.onAidDistributionMessage(call, &rcdMessage)
 
 }
 
-func PublishNewInterActionMessage(newInteraction NewCallInteraction) error {
+func PublishNewInteractionMessage(newInteraction NewCallInteraction) error {
 
 	payloadBytes, err := json.Marshal(newInteraction)
 	if err != nil {
@@ -49,6 +49,19 @@ func PublishNewInterActionMessage(newInteraction NewCallInteraction) error {
 		return err
 	}
 	redisChannelName := REDIS_NEW_INTERACTION_CHANNEL
+
+	return PublishMessageViaRedis(redisChannelName, payloadBytes)
+
+}
+
+func PublishInteractionStateMessage(interactionState InteractionState) error {
+
+	payloadBytes, err := json.Marshal(interactionState)
+	if err != nil {
+		CustomLog(LevelError, "[REDIS PUBLISH] Hata : PublishInteractionStateMessage json marshal %v", err)
+		return err
+	}
+	redisChannelName := REDIS_INTERACTION_STATE_CHANNEL
 
 	return PublishMessageViaRedis(redisChannelName, payloadBytes)
 

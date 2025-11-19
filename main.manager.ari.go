@@ -118,7 +118,8 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 		go handleStasisStartMessage(msg.(*ari.StasisStart), cl, h, ariAppInfo)
 	case *ari.StasisEnd:
 		CustomLog(LevelInfo, "[%s] StasisEnd: Channel %s left.", appName, channelID)
-
+		h := cl.Channel().Get(v.Key(ari.ChannelKey, v.Channel.ID))
+		go handleStasisEndMessage(msg.(*ari.StasisEnd), cl, h, ariAppInfo)
 	case *ari.ChannelEnteredBridge:
 		CustomLog(LevelDebug, "[%s] ChannelEnteredBridge: Channel %s joined bridge %s", appName, channelID, v.Bridge.ID)
 
@@ -142,6 +143,7 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 			peerID = v.Peer.ID
 		}
 		CustomLog(LevelInfo, "[%s] Dial: Status: %s, Peer: %s", appName, v.Dialstatus, peerID)
+		go handleDialMessage(msg.(*ari.Dial))
 
 	case *ari.ChannelVarset:
 		CustomLog(LevelTrace, "[%s] ChannelVarset: Channel %s, Var: %s, Value: %s", appName, channelID, v.Variable, v.Value)

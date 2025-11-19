@@ -11,6 +11,7 @@ import (
 const AGENT_LEG_CALL_TYPE = "agent_leg"
 const REDIS_DISTIRIBITION_CHANNEL_PREFIX = "channelAidDistribution"
 const REDIS_NEW_INTERACTION_CHANNEL = "channelInteractionForNAID"
+const REDIS_INTERACTION_STATE_CHANNEL = "channelQEInteractionState"
 
 type NewCallInteraction struct {
 	// Ajanın yetkili olduğu grup ID'lerinin listesi
@@ -262,6 +263,15 @@ type ScheduledTask struct {
 	index     int       // Heap içindeki pozisyonu (silme/güncelleme için kritik)
 }
 
+// InteractionState, sağlanan JSON yapısını temsil eder.
+type InteractionState struct {
+	InteractionID        string `json:"interactionId"`
+	RelatedAgentUsername string `json:"relatedAgentUsername"`
+	State                string `json:"state"`
+	InstanceID           string `json:"instanceId"`
+	QueueName            string `json:"queueName"`
+}
+
 type Config struct {
 	Environment         string        `json:"Environment"`
 	RedisAddresses      []string      `json:"RedisAddresses"`
@@ -402,21 +412,21 @@ const (
 )
 
 // --- DIAL_STATUS Enum (ID'li) ---
-type DIAL_STATUS int
+type DIAL_STATUS string
 
 const (
-	DIAL_STATUS_Answer      DIAL_STATUS = 1
-	DIAL_STATUS_Busy        DIAL_STATUS = 2
-	DIAL_STATUS_Cancel      DIAL_STATUS = 3
-	DIAL_STATUS_Chanunavail DIAL_STATUS = 4
-	DIAL_STATUS_Congestion  DIAL_STATUS = 5
-	DIAL_STATUS_Dontcall    DIAL_STATUS = 6
-	DIAL_STATUS_Invalidargs DIAL_STATUS = 7
-	DIAL_STATUS_Noanswer    DIAL_STATUS = 8
-	DIAL_STATUS_Ringing     DIAL_STATUS = 9
-	DIAL_STATUS_Torture     DIAL_STATUS = 10
-	DIAL_STATUS_Unknown     DIAL_STATUS = 11
-	DIAL_STATUS_Progress    DIAL_STATUS = 12
+	DIAL_STATUS_Answer      DIAL_STATUS = "ANSWER"
+	DIAL_STATUS_Busy        DIAL_STATUS = "BUSY"
+	DIAL_STATUS_Cancel      DIAL_STATUS = "CANCEL"
+	DIAL_STATUS_Chanunavail DIAL_STATUS = "CHANUNAVAIL"
+	DIAL_STATUS_Congestion  DIAL_STATUS = "CONGESTION"
+	DIAL_STATUS_Dontcall    DIAL_STATUS = "DONTCALL"
+	DIAL_STATUS_Invalidargs DIAL_STATUS = "INVALIDARGS"
+	DIAL_STATUS_Noanswer    DIAL_STATUS = "NOANSWER"
+	DIAL_STATUS_Ringing     DIAL_STATUS = "RINGING"
+	DIAL_STATUS_Torture     DIAL_STATUS = "TORTURE"
+	DIAL_STATUS_Unknown     DIAL_STATUS = "UNKNOWN"
+	DIAL_STATUS_Progress    DIAL_STATUS = "PROGRESS"
 )
 
 // --- AID_DISTRIBUTION_STATE Enum ---

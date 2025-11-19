@@ -28,7 +28,9 @@ type QueueCacheManager struct {
 type CallManager struct {
 	// Calls haritası: Anahtar (string) UniqueId'dir, Değer ise *model.Call işaretçisidir.
 	// İşaretçi kullanıyoruz ki, haritadan çektiğimizde orijinal nesneyi güncelleyebilelim.
-	calls map[string]*Call
+	calls       map[string]*Call
+	outChannels map[string]*ari.ChannelHandle
+	bridges     map[string]*Call
 
 	// Eşzamanlı okuma/yazma güvenliği için RWMutex
 	// Okumalar (Get) eşzamanlı yapılabilir (RLock), Yazmalar (Add/Remove) bloke edilir (Lock).
