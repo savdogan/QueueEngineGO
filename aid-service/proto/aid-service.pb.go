@@ -7,12 +7,13 @@
 package proto
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	_ "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	_ "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -134,7 +135,7 @@ type InteractionDistributionRequest struct {
 	// skill ids which required to handle interaction (in addition to queue skills)
 	RequiredSkills []int64 `protobuf:"varint,4,rep,packed,name=requiredSkills,proto3" json:"requiredSkills,omitempty"`
 	// Id of instance that sent request
-	InstanceId string `protobuf:"bytes,5,opt,name=instanceId,proto3" json:"instanceId,omitempty"`
+	InstanceID string `protobuf:"bytes,5,opt,name=instanceId,proto3" json:"instanceId,omitempty"`
 	// Time when interaction first enter to queue(used to return interaction to queue respecting previous position)
 	PositionTimestamp int64 `protobuf:"varint,6,opt,name=positionTimestamp,proto3" json:"positionTimestamp,omitempty"`
 	unknownFields     protoimpl.UnknownFields
@@ -199,9 +200,9 @@ func (x *InteractionDistributionRequest) GetRequiredSkills() []int64 {
 	return nil
 }
 
-func (x *InteractionDistributionRequest) GetInstanceId() string {
+func (x *InteractionDistributionRequest) GetInstanceID() string {
 	if x != nil {
-		return x.InstanceId
+		return x.InstanceID
 	}
 	return ""
 }

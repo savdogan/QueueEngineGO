@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // InitQueueManager: Sadece QueueManager nesnesini başlatır.
@@ -32,13 +34,71 @@ func InitAriConnection(ctx context.Context) {
 	CustomLog(LevelInfo, "Ari connections is starting...")
 	// 3. ARI Bağlantılarını Başlat
 	for _, ariCfg := range AppConfig.AriConnections {
-		go func(ariCfg AriConfig) {
-			if err := runApp(ctx, &ariCfg, globalClientManager); err != nil {
-				CustomLog(LevelError, "ARI application failed to start for %s: %v", ariCfg.Application, err)
-			}
-		}(ariCfg)
+
+		for _, instanceId := range AppConfig.InstanceIDs {
+
+			applicationNameInbound := fmt.Sprintf("%s%s", INBOUND_ARI_APPLICATION_PREFIX, instanceId)
+			applicationNameOutbound := fmt.Sprintf("%s%s", OUTBOUND_ARI_APPLICATION_PREFIX, instanceId)
+			connectionName1 := fmt.Sprintf("%s-%s-%s", ariCfg.Id, applicationNameInbound, instanceId)
+			connectionName2 := fmt.Sprintf("%s-%s-%s", ariCfg.Id, applicationNameOutbound, instanceId)
+
+			ariAppInfoInbound := AriAppInfo{ConnectionName: connectionName1, InboundAppName: applicationNameInbound, OutboundAppName: applicationNameOutbound, IsOutboundApplication: false, InstanceID: instanceId}
+			ariAppInfoOutbound := AriAppInfo{ConnectionName: connectionName2, InboundAppName: applicationNameInbound, OutboundAppName: applicationNameOutbound, IsOutboundApplication: true, InstanceID: instanceId}
+
+			go func(ariCfg AriConfig, ariAppInfoInbound AriAppInfo) {
+				if err := runApp(ctx, &ariCfg, globalClientManager, ariAppInfoInbound); err != nil {
+					CustomLog(LevelError, "ARI application failed to start for %+v: %v", ariAppInfoOutbound, err)
+				}
+			}(ariCfg, ariAppInfoInbound)
+
+			go func(ariCfg AriConfig, ariAppInfoOutbound AriAppInfo) {
+				if err := runApp(ctx, &ariCfg, globalClientManager, ariAppInfoOutbound); err != nil {
+					CustomLog(LevelError, "ARI application failed to start for %+v: %v", ariAppInfoOutbound, err)
+				}
+			}(ariCfg, ariAppInfoOutbound)
+		}
 	}
 
+}
+
+func InitRedisManager(ctx context.Context) {
+
+	redisClientManager = struct {
+		Pubs *redis.ClusterClient
+		Subs *redis.ClusterClient
+		ctx  *context.Context
+	}{}
+
+	redisClientManager.ctx = &ctx
+
+	// Bu redis clinet sadece publish işlemleri için kullanılır
+	AppConfig.Mu.RLock()
+	redisAddresses := AppConfig.RedisAddresses
+	redisPassword := AppConfig.RedisPassword
+	instanceIds := AppConfig.InstanceIDs
+	AppConfig.Mu.RUnlock()
+
+	redisClientManager.Subs = redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:    redisAddresses,
+		Password: redisPassword,
+	})
+
+	if redisClientManager.Subs == nil {
+		CustomLog(LevelFatal, "[REDIS SUBSCRIBE] Redis istemcisi atanmamış (rdb is nil)")
+		return
+	}
+
+	redisClientManager.Pubs = redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:    redisAddresses,
+		Password: redisPassword,
+	})
+
+	if redisClientManager.Pubs == nil {
+		CustomLog(LevelFatal, "[REDIS PUBLISHERR] Redis istemcisi atanmamış (rdb is nil)")
+		return
+	}
+
+	handleRedisSubsMessages(ctx, instanceIds)
 }
 
 func InitSchedulerManager() {

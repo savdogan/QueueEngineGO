@@ -8,7 +8,21 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	arislog "golang.org/x/exp/slog"
 )
+
+// NewSlogLogger, artık ARI'nın beklediği eski tipi döndürür.
+func NewSlogLogger(appName string) *arislog.Logger { // <-- Dönüş tipi değişti
+
+	// Eski arislog handler'ı kullan
+	handler := arislog.NewTextHandler(os.Stderr, &arislog.HandlerOptions{
+		Level: arislog.LevelDebug,
+	})
+
+	// Eski arislog.New() çağrılır
+	return arislog.New(handler).With("app", appName)
+}
 
 func getHostname() string {
 	name, err := os.Hostname()
@@ -206,32 +220,47 @@ func parseNonStandardFormat(input string) (map[string]interface{}, error) {
 	return resultMap, nil
 }
 
+func containsString(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
+			return true // Eşleşme bulundu, hemen true döndür
+		}
+	}
+	return false // Döngü tamamlandı, eşleşme yok
+}
+
 // DeserializeCallSetupWithParser: Standart dışı veriyi Go Map'e çevirip sonra JSON'a çözümler.
 func DeserializeCallSetupWithParser(callSetupString string) *CallSetup {
 
 	// 1. Özel Parser ile standart dışı string'i Go Map'ine dönüştür
 	dataMap, err := parseNonStandardFormat(callSetupString)
 	if err != nil {
-		log.Printf("ERROR: Failed to parse non-standard format: %v", err)
+		CustomLog(LevelError, "ERROR: Failed to parse non-standard format: %v", err)
 		return nil
 	}
+
+	CustomLog(LevelInfo, "DDDDDDDDDD %s", dataMap)
 
 	// 2. Map'i Geçerli Bir JSON Byte Dizisine Dönüştürme
 	// Bu adım, Go'nun Map'i standart JSON kurallarına uygun olarak tırnaklar.
 	jsonBytes, err := json.Marshal(dataMap)
 	if err != nil {
-		log.Printf("ERROR: Failed to marshal map to JSON: %v", err)
+		CustomLog(LevelError, "ERROR: Failed to marshal map to JSON: %v", err)
 		return nil
 	}
+
+	CustomLog(LevelInfo, "EEEEEEEEEE %s", string(jsonBytes))
 
 	// 3. Oluşturulan Geçerli JSON'u CallSetup yapısına çözümleme
 	callSetup := &CallSetup{}
 	err = json.Unmarshal(jsonBytes, callSetup)
 
 	if err != nil {
-		log.Printf("ERROR: Could not unmarshal valid JSON to CallSetup struct: %v. JSON: %s", err, string(jsonBytes))
+		CustomLog(LevelError, "ERROR: Could not unmarshal valid JSON to CallSetup struct: %v. JSON: %s", err, string(jsonBytes))
 		return nil
 	}
+
+	CustomLog(LevelInfo, "SCXXXXXXXXXXXXXXXXXXXXX %s %s ", callSetup.ParentId, callSetup.QueueName)
 
 	return callSetup
 }

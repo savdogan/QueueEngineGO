@@ -21,9 +21,9 @@ func (m *QueueCacheManager) GetQueueByName(queueName string) (*Queue, error) {
 	//
 	inQueueName := queueName
 
-	if inQueueName != "Yuktesti" {
-		inQueueName = "Yuktesti"
-	}
+	//	if inQueueName != "Yuktesti" {
+	//		inQueueName = "Yuktesti"
+	//	}
 
 	// --- 1. Önbellek Kontrolü (Okuma Kilidi) ---
 	m.mu.RLock()
@@ -70,19 +70,21 @@ func (m *QueueCacheManager) GetQueueByName(queueName string) (*Queue, error) {
 
 	newQueue := wbpQueueToQueue(*wbpQueue)
 
-	//To DO : aşağıdaki kısım test için bunu sil..
-	newQueue.mu.Lock()
-	newQueue.PeriodicAnnounceMaxPlayCount = 10
-	newQueue.PeriodicAnnounceInitialDelay = 5
-	newQueue.PeriodicAnnounceFrequency = 20
-	newQueue.WaitTimeout = 100
-	newQueue.ClientAnnounceSoundFile = "custom/client_announce"
-	newQueue.ClientAnnounceMinEstimationTime = 100
-	newQueue.ActionAnnounceSoundFile = "custom/action_announce"
-	newQueue.PeriodicAnnounce = "custom/announcement"
-	newQueue.MusicClass = "default"
-	newQueue.mu.Unlock()
-	//Silinecek kısmın sonu
+	/*
+		//To DO : aşağıdaki kısım test için bunu sil..
+		newQueue.mu.Lock()
+		newQueue.PeriodicAnnounceMaxPlayCount = 10
+		newQueue.PeriodicAnnounceInitialDelay = 5
+		newQueue.PeriodicAnnounceFrequency = 20
+		newQueue.WaitTimeout = 100
+		newQueue.ClientAnnounceSoundFile = "custom/client_announce"
+		newQueue.ClientAnnounceMinEstimationTime = 100
+		newQueue.ActionAnnounceSoundFile = "custom/action_announce"
+		newQueue.PeriodicAnnounce = "custom/announcement"
+		newQueue.MusicClass = "default"
+		newQueue.mu.Unlock()
+		//Silinecek kısmın sonu
+	*/
 
 	// --- 3. Önbelleğe Yazma (Yazma Kilidi) ---
 	m.mu.Lock()

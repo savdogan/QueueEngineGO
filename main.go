@@ -79,6 +79,8 @@ func main() {
 
 	InitHttpServer()
 
+	InitRedisManager(ctx)
+
 	WaitForServicesReady(ctx)
 
 	fmt.Println("[ARI CONNECTION] is starting...")

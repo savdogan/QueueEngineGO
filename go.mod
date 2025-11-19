@@ -5,11 +5,15 @@ go 1.25.3
 require (
 	github.com/CyCoreSystems/ari/v6 v6.0.0-20251024161400-681c62bc07e7
 	github.com/microsoft/go-mssqldb v1.9.3
+	github.com/redis/go-redis/v9 v9.16.0
+	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
 )
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
@@ -17,7 +21,6 @@ require (
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/rotisserie/eris v0.5.4 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect

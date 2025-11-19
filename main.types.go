@@ -8,6 +8,66 @@ import (
 	"github.com/CyCoreSystems/ari/v6"
 )
 
+const AGENT_LEG_CALL_TYPE = "agent_leg"
+const REDIS_DISTIRIBITION_CHANNEL_PREFIX = "channelAidDistribution"
+const REDIS_NEW_INTERACTION_CHANNEL = "channelInteractionForNAID"
+
+type NewCallInteraction struct {
+	// Ajanın yetkili olduğu grup ID'lerinin listesi
+	Groups []int `json:"groups"`
+
+	// Etkileşimin çalıştığı sunucu örneği/instance ID'si
+	InstanceID string `json:"instanceId"`
+
+	// Etkileşimin benzersiz kimliği (UUID/GUID)
+	InteractionID string `json:"interactionId"`
+
+	// Etkileşimin öncelik seviyesi (örneğin 0-100 arası)
+	InteractionPriority int `json:"interactionPriority"`
+
+	// Etkileşimin yönlendirileceği kuyruk adı
+	InteractionQueue string `json:"interactionQueue"`
+
+	// Etkileşim tipi (örneğin 1: Çağrı, 2: Chat, 3: Email)
+	InteractionType int `json:"interactionType"`
+
+	// Mümkünse etkileşimin atanması istenen belirli bir ajan
+	PreferredAgent string `json:"preferredAgent"`
+
+	// Etkileşimin gerektirdiği yetenek ID'lerinin listesi
+	RequiredSkills []int `json:"requiredSkills"`
+
+	// Olayın zaman damgası (milisaniseler)
+	Timestamp int64 `json:"timestamp"`
+}
+
+// DistributionMessage, yayınlayacağımız mesajın ana yapısıdır
+type RedisCallDistributionMessage struct {
+	InstanceID        string     `json:"instanceId"`
+	InteractionID     string     `json:"interactionId"`
+	Timestamp         int64      `json:"timestamp"`
+	Users             []UserDist `json:"users"`
+	SourceSystem      string     `json:"sourceSystem"`
+	QueueName         string     `json:"queueName"`
+	CurrentAttempt    int        `json:"currentAttempt"`
+	PublisherHostName string     `json:"publisherHostName"`
+}
+
+// User struct'ı mevcut kodunuzda zaten var
+type UserDist struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+}
+
+// DistributionMessage, yayınlayacağımız mesajın ana yapısıdır
+type AriAppInfo struct {
+	ConnectionName        string `json:"connectionId"`
+	InboundAppName        string `json:"inboundAppName"`
+	OutboundAppName       string `json:"outboundAppName"`
+	IsOutboundApplication bool   `json:"-"`
+	InstanceID            string `json:"instanceId"`
+}
+
 // WbpQueue, [dbo].[wbp_queue] tablosunun bir satırını temsil eder.
 // json:"..." etiketleri, bu yapıyı bir API üzerinden gönderebilmeniz için eklendi.
 type WbpQueue struct {
@@ -205,6 +265,7 @@ type ScheduledTask struct {
 type Config struct {
 	Environment         string        `json:"Environment"`
 	RedisAddresses      []string      `json:"RedisAddresses"`
+	InstanceIDs         []string      `json:"InstanceIDs"`
 	RedisPassword       string        `json:"RedisPassword"`
 	LoadSnapshotOnStart bool          `json:"LoadSnapshotOnStart"`
 	MinLogLevel         LogLevel      `json:"MinLogLevel"`
@@ -219,9 +280,8 @@ type Config struct {
 }
 
 type AriConfig struct {
-	ConnectionId string `json:"-"`
 	Id           string `json:"Id"`
-	Application  string `json:"Application"`
+	ConnectionId string `json:"-"`
 	WebsocketURL string `json:"WebsocketUrl"`
 	RestURL      string `json:"RestUrl"`
 	Username     string `json:"Username"`
@@ -377,12 +437,21 @@ const (
 	DIALPLAN_CONTEXT_QueueAction DIALPLAN_CONTEXT = "queue_action"
 )
 
-// --- DIALPLAN_VARIABLE Enum ---
 type DIALPLAN_VARIABLE string
 
 const (
-	DIALPLAN_VARIABLE_AgentAnnounce DIALPLAN_VARIABLE = "agentAnnounce"
-	// ... Diğer tüm dialplan değişkenleri buraya eklenmeli
+	DIALPLAN_VARIABLE_AgentAnnounce            DIALPLAN_VARIABLE = "agentAnnounce"
+	DIALPLAN_VARIABLE_DialTimeout              DIALPLAN_VARIABLE = "dialTimeout"
+	DIALPLAN_VARIABLE_DialUri                  DIALPLAN_VARIABLE = "dialUri"
+	DIALPLAN_VARIABLE_QeResult                 DIALPLAN_VARIABLE = "QE_RESULT"
+	DIALPLAN_VARIABLE_QeQueueName              DIALPLAN_VARIABLE = "QE_QUEUE_NAME"
+	DIALPLAN_VARIABLE_QeQueueResult            DIALPLAN_VARIABLE = "QE_QUEUE_RESULT"
+	DIALPLAN_VARIABLE_QeQueueMember            DIALPLAN_VARIABLE = "QE_QUEUE_MEMBER"
+	DIALPLAN_VARIABLE_QeQueuePosition          DIALPLAN_VARIABLE = "QE_QUEUE_POSITION"
+	DIALPLAN_VARIABLE_QeQueuePositionTimestamp DIALPLAN_VARIABLE = "QE_QUEUE_POSITION_TIMESTAMP"
+	DIALPLAN_VARIABLE_QeDtmfValue              DIALPLAN_VARIABLE = "QE_DTMF_VALUE"
+	DIALPLAN_VARIABLE_QePingTimestamp          DIALPLAN_VARIABLE = "QE_PING_TIMESTAMP"
+	DIALPLAN_VARIABLE_CallType                 DIALPLAN_VARIABLE = "call_type"
 )
 
 // --- SIP_HEADER Struct ---

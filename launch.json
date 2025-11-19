@@ -5,7 +5,7 @@
             "name": "Launch file (Dosyayı Başlat)",
             "type": "go",
             "request": "launch",
-            "program": "${file}"
+            "program": "main.go"
         },
         {
             "name": "Launch package (Paketi Başlat)",

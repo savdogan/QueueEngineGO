@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"io"
+	"log"
+	"net/http"
 
 	"github.com/CyCoreSystems/ari/v6"
 	"github.com/CyCoreSystems/ari/v6/client/native"
@@ -28,20 +30,34 @@ func (cm *ClientManager) GetClient(connectiondId string) (ari.Client, bool) {
 }
 
 // runApp, tek bir ARI bağlantısını kurar ve olayları dinler.
-func runApp(ctx context.Context, cfg *AriConfig, manager *ClientManager) error {
-	CustomLog(LevelInfo, "Connecting to ARI: %s", cfg.Application)
+func runApp(ctx context.Context, cfg *AriConfig, manager *ClientManager, ariAppInfo AriAppInfo) error {
+	CustomLog(LevelInfo, "Connecting to ARI: %s - %s - %s -%t", ariAppInfo.ConnectionName, ariAppInfo.InboundAppName, ariAppInfo.OutboundAppName, ariAppInfo.IsOutboundApplication)
 
-	// native.Connect ile ARI bağlantısı kurulur
-	cl, err := native.Connect(&native.Options{
-		Application:  cfg.Application,
-		Logger:       nil, // Standart log kullanıldığı için nil bırakılabilir
+	ariConnectionApplicationName := ""
+	if ariAppInfo.IsOutboundApplication {
+		ariConnectionApplicationName = ariAppInfo.OutboundAppName
+	} else {
+		ariConnectionApplicationName = ariAppInfo.InboundAppName
+	}
+
+	ariSlogLogger := NewSlogLogger(ariConnectionApplicationName)
+
+	options := &native.Options{
+		Application:  ariConnectionApplicationName,
+		Logger:       ariSlogLogger, // Standart log kullanıldığı için nil bırakılabilir
 		Username:     cfg.Username,
 		Password:     cfg.Password,
 		URL:          cfg.RestURL,
 		WebsocketURL: cfg.WebsocketURL,
-	})
+	}
+
+	DebugARIInfo(options.URL, options.Username, options.Password)
+
+	// native.Connect ile ARI bağlantısı kurulur
+	cl, err := native.Connect(options)
 
 	if err != nil {
+		CustomLog(LevelError, "Native.Connect Error %+v", err)
 		return err
 	}
 
@@ -51,22 +67,34 @@ func runApp(ctx context.Context, cfg *AriConfig, manager *ClientManager) error {
 		return err
 	}
 
-	AppConfig.Mu.Lock()
-	cfg.ConnectionId = fmt.Sprintf("%s-%s-%s", cfg.Id, cfg.Application, asteriskInfo.SystemInfo.EntityID)
-	AppConfig.Mu.Unlock()
-
 	// İstemciyi Yöneticiye Kaydet
-	manager.AddClient(cfg.ConnectionId, cl)
-	CustomLog(LevelInfo, "Client registered and listening: %s", cfg.Application)
+	manager.AddClient(ariAppInfo.ConnectionName, cl)
+	CustomLog(LevelInfo, "Client registered and listening: %s", ariAppInfo.ConnectionName)
 
 	// Olay dinlemesini başlat (bloklamaz)
-	go listenApp(ctx, cl, cfg.ConnectionId)
+	go listenApp(ctx, cl, ariAppInfo)
 
 	return nil
 }
 
+func DebugARIInfo(url, user, pass string) {
+	req, _ := http.NewRequest("GET", url+"/asterisk/info", nil)
+	req.SetBasicAuth(user, pass)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println("HTTP error:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Println("Status:", resp.Status)
+	log.Println("Raw Body:", string(body)) // 🔥 HTML ise burada görünecek
+}
+
 // handleAriEvent, gelen tüm ARI Event arayüzlerini işler. (Java'daki onSuccess eşleniği)
-func handleAriEvent(msg ari.Event, cl ari.Client, connectionId string) {
+func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 
 	CustomLog(LevelInfo, "Ari Event : %+v", msg)
 
@@ -87,7 +115,7 @@ func handleAriEvent(msg ari.Event, cl ari.Client, connectionId string) {
 		CustomLog(LevelInfo, "[%s] StasisStart: Channel %s entered. Args: %v", appName, channelID, v.Args)
 		// Kanala özgü işleyiciyi başlat
 		h := cl.Channel().Get(v.Key(ari.ChannelKey, v.Channel.ID))
-		go handleStasisStartMessage(msg.(*ari.StasisStart), cl, h, connectionId)
+		go handleStasisStartMessage(msg.(*ari.StasisStart), cl, h, ariAppInfo)
 	case *ari.StasisEnd:
 		CustomLog(LevelInfo, "[%s] StasisEnd: Channel %s left.", appName, channelID)
 
@@ -130,9 +158,9 @@ func handleAriEvent(msg ari.Event, cl ari.Client, connectionId string) {
 }
 
 // listenApp, tüm ARI olaylarını dinleyen sonsuz döngüyü çalıştırır.
-func listenApp(ctx context.Context, cl ari.Client, connectionId string) {
+func listenApp(ctx context.Context, cl ari.Client, ariAppInfo AriAppInfo) {
 
-	CustomLog(LevelInfo, "Listen App %s", cl.ApplicationName())
+	CustomLog(LevelInfo, "Listen App %s , connectionId : %s", cl.ApplicationName(), ariAppInfo.ConnectionName)
 
 	allEvents := cl.Bus().Subscribe(nil, "StasisStart", "StasisEnd", "ChannelEnteredBridge", "ChannelLeftBridge", "PlaybackStarted", "PlaybackFinished", "ChannelVarset", "ChannelStateChange", "ChannelDialplan", "ChannelDtmfReceived", "Dial")
 	defer allEvents.Cancel()
@@ -147,7 +175,7 @@ func listenApp(ctx context.Context, cl ari.Client, connectionId string) {
 			}
 
 			// Her olayı ayrı bir goroutine'de işle
-			go handleAriEvent(e, cl, connectionId)
+			go handleAriEvent(e, cl, ariAppInfo)
 
 		case <-ctx.Done():
 			CustomLog(LevelInfo, "Listener shutting down...")

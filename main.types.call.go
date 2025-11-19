@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -12,15 +13,18 @@ import (
 type Call struct {
 	mu sync.RWMutex `json:"-"` // Call yapısının eşzamanlı erişimi için kilit
 	// --- Veri Alanları (Sayısal, String ve Listeler) ---
-	UniqueId       string  `json:"uniqueId"`
-	ParentId       string  `json:"parentId,omitempty"`
-	ExternalId     string  `json:"externalId,omitempty"`
-	ServerId       int64   `json:"serverId"`
-	QueueName      string  `json:"queueName"`
-	Priority       int     `json:"priority"`
-	PreferredAgent string  `json:"preferredAgent,omitempty"`
-	LastDtmf       string  `json:"lastDtmf,omitempty"`
-	Skills         []int64 `json:"skills,omitempty"`
+	InstanceID              string  `json:"instanceId,omitempty"`
+	ConnectionName          string  `json:"connectionId,omitempty"`
+	OutBoundApplicationName string  `json:"outboundApplicationName,omitempty"`
+	UniqueId                string  `json:"uniqueId"`
+	ParentId                string  `json:"parentId,omitempty"`
+	ExternalId              string  `json:"externalId,omitempty"`
+	ServerId                int64   `json:"serverId"`
+	QueueName               string  `json:"queueName"`
+	Priority                int     `json:"priority"`
+	PreferredAgent          string  `json:"preferredAgent,omitempty"`
+	LastDtmf                string  `json:"lastDtmf,omitempty"`
+	Skills                  []int64 `json:"skills,omitempty"`
 
 	// --- Types -> Constant Tipleri ---
 	State               CALL_STATE              `json:"state"`
@@ -51,8 +55,6 @@ type Call struct {
 	DistributionAttemptNumber   int64                              `json:"distributionAttemptNumber,omitempty"`
 	CurrentDistributionAttempts map[string]CallDistributionAttempt `json:"-"` // Genellikle serileştirilmez
 	FailedPingAttempts          int                                `json:"-"`
-
-	ConnectionId string `json:"connectionId,omitempty"`
 
 	ChannelKey               *ari.Key `json:"channelKey,omitempty"`
 	ChannelId                string   `json:"channelId,omitempty"`
@@ -226,6 +228,10 @@ func InstantiateCall(message *ari.StasisStart, uniqueId string, channel string, 
 // CreateCall metodu, yeni bir Call nesnesi oluşturur.
 func CreateCall(message *ari.StasisStart, uniqueId string, channelName string, callSetupJson string, serverId int64) *Call {
 
+	CustomLog(LevelInfo, "Call Setup %s", callSetupJson)
+
+	log.Print(callSetupJson)
+
 	// StringUtils.isBlank kontrolünün Go karşılığı
 	// strings.TrimSpace ile baş ve sondaki boşluklar silinir, sonra boş olup olmadığı kontrol edilir.
 	if strings.TrimSpace(uniqueId) == "" || strings.TrimSpace(channelName) == "" {
@@ -234,10 +240,18 @@ func CreateCall(message *ari.StasisStart, uniqueId string, channelName string, c
 	}
 
 	// CallSetup nesnesini JSON'dan dönüştürme
-	callSetup := DeserializeCallSetupWithParser(callSetupJson)
+	// callSetup := DeserializeCallSetupWithParser(callSetupJson)
+
+	callSetup := &CallSetup{}
+
+	err := json.Unmarshal([]byte(strings.ReplaceAll(callSetupJson, "'", "\"")), callSetup)
+	if err != nil {
+		CustomLog(LevelError, "ERROR: Could not unmarshal valid JSON to CallSetup struct: %v. JSON: %s", err, callSetupJson)
+		return nil
+	}
 
 	// Null kontrolü
-	if callSetup != nil {
+	if callSetup.ParentId != "" {
 		// instantiateCall metodu çağrılır (daha önce çevirdiğimiz metot)
 		// cm.InstantiateCall, önceki çevirideki metot adıdır.
 		return InstantiateCall(message, uniqueId, channelName, *callSetup, serverId)
