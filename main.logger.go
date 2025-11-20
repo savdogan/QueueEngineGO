@@ -27,7 +27,7 @@ func (writer *ChannelWriter) Write(p []byte) (n int, err error) {
 
 var cfgLogDirectory string
 
-func CustomLog(level LogLevel, format string, v ...interface{}) {
+func clog(level LogLevel, format string, v ...interface{}) {
 	// 1. Kontrol: Log seviyesi minimum seviyeden düşük öncelikli mi?
 	if level > cfgMinLogLevel {
 		return
@@ -55,7 +55,7 @@ func CustomLog(level LogLevel, format string, v ...interface{}) {
 	// 3. Logu Basma
 	message := levelTag + fmt.Sprintf(format, v...)
 
-	// 2, CustomLog'u çağıran fonksiyonu işaret eder.
+	// 2, clog'u çağıran fonksiyonu işaret eder.
 	log.Output(2, message)
 
 	// Fatal seviyesinde sistemden çıkış yapılması

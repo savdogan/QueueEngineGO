@@ -5,24 +5,24 @@ import "time"
 // OK
 func (cm *CallManager) setupPositionAnnounce(call_UniqueId string) {
 
-	CustomLog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
+	clog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
 
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
 		return
 	}
 
-	call.mu.RLock()
+	call.RLock()
 	call_QueueName := call.QueueName
 	call_PositionAnnouncePlayCount := call.PositionAnnouncePlayCount
-	call.mu.RUnlock()
+	call.RUnlock()
 
 	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
 
 	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
+		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
@@ -34,12 +34,12 @@ func (cm *CallManager) setupPositionAnnounce(call_UniqueId string) {
 	currentQueue.mu.RUnlock()
 
 	if !queue_PositionAnnounceIsActive && !queue_PositionReportHoldTimeIsActive {
-		CustomLog(LevelDebug, "Queue Position Announce setup skipped , Because : queue_PositionAnnounceIsActive and queue_PositionReportHoldTimeIsActive  are false: call id :  %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Position Announce setup skipped , Because : queue_PositionAnnounceIsActive and queue_PositionReportHoldTimeIsActive  are false: call id :  %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
 	if call_PositionAnnouncePlayCount >= int(queue_PositionAnnouncePlayCount) {
-		CustomLog(LevelDebug, "Queue Position Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Position Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
@@ -49,32 +49,32 @@ func (cm *CallManager) setupPositionAnnounce(call_UniqueId string) {
 		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_PositionAnnounce)
 	})
 
-	CustomLog(LevelDebug, "Setup scheduled Position Announce after %d seconds for Call: %s", queue_PositionAnnounceInitialDelay, call_UniqueId)
+	clog(LevelDebug, "Setup scheduled Position Announce after %d seconds for Call: %s", queue_PositionAnnounceInitialDelay, call_UniqueId)
 
 }
 
 // OK
 func (cm *CallManager) setupActionAnnounce(call_UniqueId string) {
 
-	CustomLog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
+	clog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
 
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
 		return
 	}
 
-	call.mu.RLock()
+	call.RLock()
 	call_QueueName := call.QueueName
 	call_ActionAnnouncePlayCount := call.ActionAnnouncePlayCount
 	call_ActionAnnounceProhibition := call.ActionAnnounceProhibition
-	call.mu.RUnlock()
+	call.RUnlock()
 
 	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
 
 	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
+		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
@@ -85,17 +85,17 @@ func (cm *CallManager) setupActionAnnounce(call_UniqueId string) {
 	currentQueue.mu.RUnlock()
 
 	if queue_ActionAnnounceMaxPlayCount == 0 || call_ActionAnnounceProhibition {
-		CustomLog(LevelDebug, "Queue Action Announce is not active or Action Announce Prohibition is true , so Action Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Action Announce is not active or Action Announce Prohibition is true , so Action Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
 	if queue_ActionAnnounceSoundFile == "" {
-		CustomLog(LevelDebug, "Queue Action Announce Sound File is empty , so Action Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Action Announce Sound File is empty , so Action Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
 	if call_ActionAnnouncePlayCount >= int(queue_ActionAnnounceMaxPlayCount) {
-		CustomLog(LevelDebug, "Queue Action Announce max play count reached , so Action Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Action Announce max play count reached , so Action Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
@@ -105,18 +105,18 @@ func (cm *CallManager) setupActionAnnounce(call_UniqueId string) {
 		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_ActionAnnounce)
 	})
 
-	CustomLog(LevelDebug, "Setup scheduled Action Announce after %d seconds for Call: %s", queue_ActionAnnounceInitialDelay, call_UniqueId)
+	clog(LevelDebug, "Setup scheduled Action Announce after %d seconds for Call: %s", queue_ActionAnnounceInitialDelay, call_UniqueId)
 
 }
 
 func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
 
-	CustomLog(LevelDebug, "Processing Periodic Announce for Call: %s", call_UniqueId)
+	clog(LevelDebug, "Processing Periodic Announce for Call: %s", call_UniqueId)
 
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
 		return
 	}
 
@@ -124,15 +124,15 @@ func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
 		return
 	}
 
-	call.mu.RLock()
+	call.RLock()
 	call_QueueName := call.QueueName
 	call_PeriodicPlayAnnounceCount := call.PeriodicPlayAnnounceCount
-	call.mu.RUnlock()
+	call.RUnlock()
 
 	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
 
 	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call.UniqueId, call.QueueName)
+		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call.UniqueId, call.QueueName)
 		return
 	}
 
@@ -142,18 +142,18 @@ func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
 	currentQueue.mu.RUnlock()
 
 	if queue_PeriodicAnnounce == "" {
-		CustomLog(LevelDebug, "Queue Periodic Announce is empty , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Periodic Announce is empty , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
 	if call_PeriodicPlayAnnounceCount >= int(queue_PeriodicAnnounceMaxPlayCount) {
-		CustomLog(LevelDebug, "Queue Periodic Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Periodic Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
-	call.mu.Lock()
+	call.Lock()
 	call.CurrentCallScheduleAction = CALL_SCHEDULED_ACTION_PeriodicAnnounce
-	call.mu.Unlock()
+	call.Unlock()
 
 	//To DO: Buraya şimdi aksiyon yazılacak
 
@@ -162,24 +162,24 @@ func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
 // OK
 func (cm *CallManager) setupPeriodicAnnounce(call_UniqueId string) {
 
-	CustomLog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
+	clog(LevelDebug, "Setup starting Periodic Announce for Call: %s", call_UniqueId)
 
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
 		return
 	}
 
-	call.mu.RLock()
+	call.RLock()
 	call_QueueName := call.QueueName
 	call_PeriodicAnnouncePlayCount := call.PeriodicPlayAnnounceCount
-	call.mu.RUnlock()
+	call.RUnlock()
 
 	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
 
 	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
+		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
@@ -190,12 +190,12 @@ func (cm *CallManager) setupPeriodicAnnounce(call_UniqueId string) {
 	currentQueue.mu.RUnlock()
 
 	if queue_PeriodicAnnounce == "" {
-		CustomLog(LevelDebug, "Queue Periodic Announce is empty , so Periodic Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Periodic Announce is empty , so Periodic Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
 	if call_PeriodicAnnouncePlayCount >= int(queue_PeriodicAnnouncePlayCount) {
-		CustomLog(LevelDebug, "Queue Periodic Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
+		clog(LevelDebug, "Queue Periodic Announce max play count reached , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
@@ -205,14 +205,14 @@ func (cm *CallManager) setupPeriodicAnnounce(call_UniqueId string) {
 		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_PeriodicAnnounce)
 	})
 
-	CustomLog(LevelDebug, "Setup scheduled Periodic Announce after %d seconds for Call: %s", queue_PeriodicAnnounceInitialDelay, call_UniqueId)
+	clog(LevelDebug, "Setup scheduled Periodic Announce after %d seconds for Call: %s", queue_PeriodicAnnounceInitialDelay, call_UniqueId)
 
 }
 
 func isCallAvailForNextAction(call *Call, action CALL_SCHEDULED_ACTION) bool {
 	//To DO : Checck Active Announce Processes for Call
-	call.mu.Lock()
-	defer call.mu.Unlock()
+	call.Lock()
+	defer call.Unlock()
 	if call.CurrentCallScheduleAction == CALL_SCHEDULED_ACTION_Empty {
 		return true
 	}
@@ -230,27 +230,27 @@ func processQueueAction(call_UniqueId string, action CALL_SCHEDULED_ACTION) {
 	case CALL_SCHEDULED_ACTION_PeriodicAnnounce:
 		globalCallManager.runActionPeriodicAnnounce(call_UniqueId)
 	default:
-		CustomLog(LevelWarn, "Unknown scheduled action: %s for Call: %s", action, call_UniqueId)
+		clog(LevelWarn, "Unknown scheduled action: %s for Call: %s", action, call_UniqueId)
 	}
 }
 
 func (cm *CallManager) runActionQueueTimeOut(call_UniqueId string) {
 
-	CustomLog(LevelDebug, "Processing Queue Timeout for Call: %s", call_UniqueId)
+	clog(LevelDebug, "Processing Queue Timeout for Call: %s", call_UniqueId)
 
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
 		return
 	}
 
-	call.mu.RLock()
+	call.RLock()
 	call_State := call.State
-	call.mu.RUnlock()
+	call.RUnlock()
 
 	if call_State != CALL_STATE_InQueue {
-		CustomLog(LevelDebug, "[CALL_PROCESS_INFO] call is not waiting , so queue wait time action ignored, call id : %s", call_UniqueId)
+		clog(LevelDebug, "[CALL_PROCESS_INFO] call is not waiting , so queue wait time action ignored, call id : %s", call_UniqueId)
 		return
 	}
 
@@ -260,12 +260,12 @@ func (cm *CallManager) runActionQueueTimeOut(call_UniqueId string) {
 
 func (cm *CallManager) runActionClientAnnounce(call_UniqueId string) {
 
-	CustomLog(LevelDebug, "Processing Client Announce for Call: %s", call_UniqueId)
+	clog(LevelDebug, "Processing Client Announce for Call: %s", call_UniqueId)
 
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		CustomLog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
 		return
 	}
 
@@ -273,9 +273,9 @@ func (cm *CallManager) runActionClientAnnounce(call_UniqueId string) {
 		return
 	}
 
-	call.mu.Lock()
+	call.Lock()
 	call.CurrentCallScheduleAction = CALL_SCHEDULED_ACTION_ClientAnnounce
-	call.mu.Unlock()
+	call.Unlock()
 	//To DO: Buraya şimdi aksiyon yazılacak
 
 }
@@ -284,29 +284,29 @@ func (cm *CallManager) runActionClientAnnounce(call_UniqueId string) {
 
 func (cm *CallManager) startMoh(call *Call) error {
 
-	globalQueueManager.mu.RLock()
-	defer globalQueueManager.mu.RUnlock()
+	globalQueueManager.RLock()
+	defer globalQueueManager.RUnlock()
 
-	globalClientManager.mu.Lock()
-	defer globalClientManager.mu.Unlock()
+	globalClientManager.Lock()
+	defer globalClientManager.Unlock()
 
 	currentQueue, err := globalQueueManager.GetQueueByName(call.QueueName)
 
 	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call.UniqueId, call.QueueName)
+		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call.UniqueId, call.QueueName)
 		return err
 	}
 
 	musicClass := currentQueue.MusicClass
 	if musicClass == "" {
 		musicClass = "Default"
-		CustomLog(LevelDebug, "currentQueue.MusicClass is empty. Using Default MOH Class for Call Moh Start , Call Id : %s", call.UniqueId)
+		clog(LevelDebug, "currentQueue.MusicClass is empty. Using Default MOH Class for Call Moh Start , Call Id : %s", call.UniqueId)
 	}
 
 	ariClient, found := globalClientManager.GetClient(call.ConnectionId)
 
 	if !found {
-		CustomLog(LevelError, "ARI Client not found for Call Moh Start , Call Application : %s , Call Id : %s", call.Application, call.UniqueId)
+		clog(LevelError, "ARI Client not found for Call Moh Start , Call Application : %s , Call Id : %s", call.Application, call.UniqueId)
 		return fmt.Errorf("ARI Client not found for Call Moh Start , Call Application : %s , Call Id : %s", call.Application, call.UniqueId)
 	}
 
@@ -314,7 +314,7 @@ func (cm *CallManager) startMoh(call *Call) error {
 
 	err = ch.MOH(musicClass)
 	if err != nil {
-		CustomLog(LevelError, "Error starting MOH for Call Id : %s , Error : %+v", call.UniqueId, err)
+		clog(LevelError, "Error starting MOH for Call Id : %s , Error : %+v", call.UniqueId, err)
 		return err
 	}
 

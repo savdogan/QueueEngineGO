@@ -11,7 +11,7 @@ import (
 )
 
 type Call struct {
-	mu sync.RWMutex `json:"-"` // Call yapısının eşzamanlı erişimi için kilit
+	sync.RWMutex `json:"-"` // Call yapısının eşzamanlı erişimi için kilit
 	// --- Veri Alanları (Sayısal, String ve Listeler) ---
 	InstanceID              string  `json:"instanceId,omitempty"`
 	ConnectionName          string  `json:"connectionId,omitempty"`
@@ -230,7 +230,7 @@ func InstantiateCall(message *ari.StasisStart, uniqueId string, channel string, 
 // CreateCall metodu, yeni bir Call nesnesi oluşturur.
 func CreateCall(message *ari.StasisStart, uniqueId string, channelName string, callSetupJson string, serverId int64) *Call {
 
-	CustomLog(LevelInfo, "Call Setup %s", callSetupJson)
+	clog(LevelInfo, "Call Setup %s", callSetupJson)
 
 	log.Print(callSetupJson)
 
@@ -248,7 +248,7 @@ func CreateCall(message *ari.StasisStart, uniqueId string, channelName string, c
 
 	err := json.Unmarshal([]byte(strings.ReplaceAll(callSetupJson, "'", "\"")), callSetup)
 	if err != nil {
-		CustomLog(LevelError, "ERROR: Could not unmarshal valid JSON to CallSetup struct: %v. JSON: %s", err, callSetupJson)
+		clog(LevelError, "ERROR: Could not unmarshal valid JSON to CallSetup struct: %v. JSON: %s", err, callSetupJson)
 		return nil
 	}
 

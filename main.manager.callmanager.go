@@ -53,7 +53,7 @@ func (cm *CallManager) RemoveCall(uniqueId string) {
 	defer cm.mu.Unlock()
 
 	delete(cm.calls, uniqueId)
-	// CustomLog(constants.LevelInfo, "Call removed: %s", uniqueId)
+	// clog(constants.LevelInfo, "Call removed: %s", uniqueId)
 }
 
 // RemoveCall, bir Call nesnesini UniqueId kullanarak listeden siler.
@@ -63,7 +63,7 @@ func (cm *CallManager) RemoveOutBoundCall(uniqueId string) {
 	defer cm.mu.Unlock()
 
 	delete(cm.outChannels, uniqueId)
-	// CustomLog(constants.LevelInfo, "Call removed: %s", uniqueId)
+	// clog(constants.LevelInfo, "Call removed: %s", uniqueId)
 }
 
 // GetAllCalls, anlık olarak aktif tüm çağrıların bir listesini döndürür.

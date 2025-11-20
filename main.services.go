@@ -13,7 +13,7 @@ func startHttpEnabled() {
 	manager := globalClientManager
 	go func() {
 		listenAddr := fmt.Sprintf(":%d", AppConfig.HttpPort)
-		CustomLog(LevelInfo, "Listening for HTTP requests on %s", listenAddr)
+		clog(LevelInfo, "Listening for HTTP requests on %s", listenAddr)
 
 		// HTTP Handler'ı tanımlama
 		http.Handle("/call", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +26,7 @@ func startHttpEnabled() {
 
 			cl, ok := manager.GetClient(appName)
 			if !ok {
-				CustomLog(LevelWarn, "Client not found for app: %s", appName)
+				clog(LevelWarn, "Client not found for app: %s", appName)
 				w.WriteHeader(http.StatusNotFound)
 				w.Write([]byte("ARI Client not found for app: " + appName))
 				return
@@ -34,7 +34,7 @@ func startHttpEnabled() {
 
 			h, err := makeCall(cl)
 			if err != nil {
-				CustomLog(LevelError, "Failed to create call via %s: %v", appName, err)
+				clog(LevelError, "Failed to create call via %s: %v", appName, err)
 				w.WriteHeader(http.StatusBadGateway)
 				w.Write([]byte("Failed to create call: " + err.Error()))
 				return
@@ -51,7 +51,7 @@ func startHttpEnabled() {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			CustomLog(LevelInfo, "[HTTP] Event received: %+v", e)
+			clog(LevelInfo, "[HTTP] Event received: %+v", e)
 			//go m.handleEvent(e)
 			w.WriteHeader(http.StatusOK)
 		})
@@ -63,9 +63,9 @@ func startHttpEnabled() {
 			// Sadece IP adresini almak isterseniz:
 			ip, _, err := net.SplitHostPort(clientAddr)
 			if err == nil {
-				CustomLog(LevelInfo, "İstek IP: %s", ip)
+				clog(LevelInfo, "İstek IP: %s", ip)
 			} else {
-				CustomLog(LevelInfo, "İstek Adresi: %s", clientAddr)
+				clog(LevelInfo, "İstek Adresi: %s", clientAddr)
 			}
 
 			// URL Query (sorgu) parametrelerini al
@@ -78,7 +78,7 @@ func startHttpEnabled() {
 				return
 			}
 
-			CustomLog(LevelInfo, "[COMMAND] New command received: %s, value: %s", cmd, valueStr)
+			clog(LevelInfo, "[COMMAND] New command received: %s, value: %s", cmd, valueStr)
 
 			// Komuta göre farklı işlemleri yap
 			switch strings.ToLower(cmd) {
@@ -151,7 +151,7 @@ func startHttpEnabled() {
 			if err != nil {
 				// Dosya bulunamazsa veya okuma hatası olursa 500 hatası döndür
 				http.Error(w, fmt.Sprintf("Console file is not found: %s. check file path.", "console.html"), http.StatusInternalServerError)
-				CustomLog(LevelError, "Console file reading error: %v", err)
+				clog(LevelError, "Console file reading error: %v", err)
 				return
 			}
 
@@ -168,7 +168,7 @@ func startHttpEnabled() {
 			if err != nil {
 				// Dosya bulunamazsa veya okuma hatası olursa 500 hatası döndür
 				http.Error(w, fmt.Sprintf("Console file is not found: %s. check file path.", "metric.view.console.html"), http.StatusInternalServerError)
-				CustomLog(LevelError, "Console file reading error: %v", err)
+				clog(LevelError, "Console file reading error: %v", err)
 				return
 			}
 
@@ -187,13 +187,13 @@ func startHttpEnabled() {
 
 			// 3. Kilitsiz Bölge: Toplu I/O işlemini gerçekleştir
 			//if _, err := w.Write([]byte(metricsPayload)); err != nil {
-			//	CustomLog(LevelError, "[PROMETHEUS] Yanıt yazılırken hata oluştu: %v", err)
+			//	clog(LevelError, "[PROMETHEUS] Yanıt yazılırken hata oluştu: %v", err)
 			//}
 		})
 
-		CustomLog(LevelInfo, "[HTTP] Dinleniyor :%d (Metrics)", AppConfig.HttpPort)
+		clog(LevelInfo, "[HTTP] Dinleniyor :%d (Metrics)", AppConfig.HttpPort)
 		if err := http.ListenAndServe(fmt.Sprintf(":%d", AppConfig.HttpPort), nil); err != nil && err != http.ErrServerClosed {
-			CustomLog(LevelError, "Http server (port : %d) error: %v", AppConfig.HttpPort, err)
+			clog(LevelError, "Http server (port : %d) error: %v", AppConfig.HttpPort, err)
 		}
 	}()
 }

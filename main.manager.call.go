@@ -41,19 +41,19 @@ func (cm *CallManager) processCall(call *Call) {
 
 func (cm *CallManager) queueProcessStart(call *Call) {
 
-	call.mu.Lock()
+	call.Lock()
 	call_UniqueuId := call.UniqueId
 	call.CurrentProcessName = PROCESS_NAME_queue
 	call_QueueName := call.QueueName
 	call_InstanceID := call.InstanceID
-	call.mu.Unlock()
+	call.Unlock()
 
-	CustomLog(LevelDebug, "Call is in Queue Process Start : %s ", call_UniqueuId)
+	clog(LevelDebug, "Call is in Queue Process Start : %s ", call_UniqueuId)
 
 	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
 
 	if err != nil {
-		CustomLog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueuId, call_QueueName)
+		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueuId, call_QueueName)
 		return
 	}
 
@@ -72,7 +72,7 @@ func (cm *CallManager) queueProcessStart(call *Call) {
 			processQueueAction(call_UniqueuId, CALL_SCHEDULED_ACTION_QueueTimeout)
 		})
 	} else {
-		CustomLog(LevelDebug, "No Queue Timeout set for Call: %s , QueueName : %s", call_UniqueuId, call_QueueName)
+		clog(LevelDebug, "No Queue Timeout set for Call: %s , QueueName : %s", call_UniqueuId, call_QueueName)
 	}
 
 	//scheduleClientAnnounce
@@ -91,9 +91,9 @@ func (cm *CallManager) queueProcessStart(call *Call) {
 	//schedulePositionAnnounce
 	go cm.setupPositionAnnounce(call_UniqueuId)
 
-	call.mu.Lock()
+	call.Lock()
 	call.State = CALL_STATE_InQueue
-	call.mu.Unlock()
+	call.Unlock()
 
 	err = PublishNewInteractionMessage(NewCallInteraction{
 		Groups:              []int{},
@@ -107,18 +107,18 @@ func (cm *CallManager) queueProcessStart(call *Call) {
 	})
 
 	if err != nil {
-		CustomLog(LevelError, "Publish New Interaction Message is failed for Call: %s , QueueName : %s , Error : %v", call_UniqueuId, call_QueueName, err)
+		clog(LevelError, "Publish New Interaction Message is failed for Call: %s , QueueName : %s , Error : %v", call_UniqueuId, call_QueueName, err)
 		return
 	}
 
-	CustomLog(LevelDebug, "Call is in Queue Process Setup Completed : %s ", call_UniqueuId)
+	clog(LevelDebug, "Call is in Queue Process Setup Completed : %s ", call_UniqueuId)
 
 }
 
 // terminateCall, verilen çağrıyı güvenli bir şekilde sonlandırır ve kaynakları temizler.
 func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINATION_REASON) {
 	// 1. Kilitleme (Java'daki call.lock() eşleniği)
-	call.mu.RLock()
+	call.RLock()
 	call_UniqueId := call.UniqueId
 	call_state := call.State
 	call_InstanceID := call.InstanceID
@@ -127,69 +127,45 @@ func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINAT
 	call_BridgedChannel := call.BridgedChannel
 	call_connectionName := call.ConnectionName
 	call_ConnectedAgentChannelID := call.ConnectedAgentChannelID
-	call.mu.RUnlock() // Kilidi try-finally bloğu gibi her durumda serbest bırak
+	call.RUnlock() // Kilidi try-finally bloğu gibi her durumda serbest bırak
 
 	// 2. Durum Kontrolü
 
-	call.mu.Lock()
+	call.Lock()
 	if call_state == CALL_STATE_Terminated {
-		CustomLog(LevelDebug, "[%s] Call already terminated. No action taken.", call_UniqueId)
-		call.mu.Unlock()
+		clog(LevelDebug, "[%s] Call already terminated. No action taken.", call_UniqueId)
+		call.Unlock()
 		return // Zaten sonlanmışsa, hiçbir şey yapma
 	}
 	call.State = CALL_STATE_Terminated
 	call.TerminationReason = terminationReason
-	call.mu.Unlock()
+	call.Unlock()
 
 	// 3. Loglama ve Durumu Güncelleme
 	// log.info("[{}] Terminated: {}", call.getUniqueId(), call);
 
-	CustomLog(LevelInfo, "[%s] Terminated. Reason: %s", call_UniqueId, terminationReason)
+	clog(LevelInfo, "[%s] Terminated. Reason: %s", call_UniqueId, terminationReason)
 
 	// 4. Zamanlanmış Görevleri İptal Etme (Scheduler Manager kullanımı)
 	// call.getScheduledActions().values().forEach(a -> a.cancel(true));
 
 	// globalScheduler'ı kullanarak UniqueId'ye ait tüm görevleri iptal et.
 	globalScheduler.CancelByCallID(call_UniqueId)
-	CustomLog(LevelDebug, "[%s] All scheduled tasks cancelled.", call_UniqueId)
+	clog(LevelDebug, "[%s] All scheduled tasks cancelled.", call_UniqueId)
 
-	logCallInfo(call, "--------------------------terminateCall--------------")
+	logAnyInfo(call, "[TERMINATED]")
 
 	ariClient, found := globalClientManager.GetClient(call_connectionName)
 	if found {
-		if call_BridgedChannel != "" {
-			agentChannelHandle := ariClient.Channel().Get(ari.NewKey(ari.ChannelKey, call_BridgedChannel))
-			if agentChannelHandle.ID() != "" {
-				CustomLog(LevelDebug, "Agent channel is deleting %s", call_BridgedChannel)
-				err := agentChannelHandle.Hangup()
-				if err != nil {
-					CustomLog(LevelError, "Error while agentChannelHandle Hangup the agent channel : %s , error : %+v ", call_BridgedChannel, err)
-				}
-			}
-		}
-		if call_Bridge != "" {
-			bridgeKey := ari.NewKey(ari.BridgeKey, call_Bridge)
-			bridgeHandle := ariClient.Bridge().Get(bridgeKey)
-			if bridgeHandle.ID() != "" {
-				CustomLog(LevelDebug, "Bridge is deleting %s", call_Bridge)
-				err := bridgeHandle.Delete()
-				if err != nil {
-					CustomLog(LevelError, "Error while deleting the bridge : %s , error : %+v ", call_Bridge, err)
-				}
-			}
-		}
-		if call_ConnectedAgentChannelID != "" && call_ConnectedAgentChannelID != call_BridgedChannel {
-			agentChannelHandle := ariClient.Channel().Get(ari.NewKey(ari.ChannelKey, call_ConnectedAgentChannelID))
-			if agentChannelHandle.ID() != "" {
-				CustomLog(LevelDebug, "Agent channel(ConnectedAgentChannelID) is deleting %s", call_ConnectedAgentChannelID)
-				err := agentChannelHandle.Hangup()
-				if err != nil {
-					CustomLog(LevelError, "Error while agentChannelHandle Hangup(ConnectedAgentChannelID) the agent channel : %s , error : %+v ", call_ConnectedAgentChannelID, err)
-				}
-			}
-		}
+
+		terminateBridge(call_Bridge, call_UniqueId, ariClient)
+
+		terminateChannel(call_BridgedChannel, call_UniqueId, ariClient)
+
+		terminateChannel(call_ConnectedAgentChannelID, call_UniqueId, ariClient)
+
 	} else {
-		CustomLog(LevelError, "Ari Client not found in terminate call %s", call_UniqueId)
+		clog(LevelError, "Ari Client not found in terminate call %s", call_UniqueId)
 	}
 
 	cm.RemoveCall(call_UniqueId)
@@ -208,16 +184,16 @@ func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINAT
 
 // onAidDistributionMessage, AID'den gelen dağıtım isteğini işler.
 func (cm *CallManager) onAidDistributionMessage(call *Call, message *RedisCallDistributionMessage) {
-	call.mu.Lock() // Kilitleme
+	call.Lock() // Kilitleme
 
 	// 1. Durum Kontrolü
 	if call.IsCallInDistribution {
-		CustomLog(LevelWarn, "[%s] Got new distribution request while executing the previous one. Ignoring...", call.UniqueId)
-		call.mu.Unlock()
+		clog(LevelWarn, "[%s] Got new distribution request while executing the previous one. Ignoring...", call.UniqueId)
+		call.Unlock()
 		return
 	} else if call.State == CALL_STATE_BridgedWithAgent {
-		CustomLog(LevelWarn, "[%s] Got new distribution request but there is already connected agent. Dismissing distribution...", call.UniqueId)
-		call.mu.Unlock()
+		clog(LevelWarn, "[%s] Got new distribution request but there is already connected agent. Dismissing distribution...", call.UniqueId)
+		call.Unlock()
 
 		// Kilit dışında Facade çağrısı
 		//ds.AidFacade.PublishDistributionDismissedMessage(call.ParentId, call.QueueName)
@@ -232,7 +208,7 @@ func (cm *CallManager) onAidDistributionMessage(call *Call, message *RedisCallDi
 	call.DistributionAttemptNumber++
 	attemptNumber := call.DistributionAttemptNumber
 
-	CustomLog(LevelInfo, "[%s] Trying to distribute call to %d agents with dial timeout %d sec (attempt %d)",
+	clog(LevelInfo, "[%s] Trying to distribute call to %d agents with dial timeout %d sec (attempt %d)",
 		call.UniqueId, len(users), dialTimeout, attemptNumber)
 
 	// 3. Logger Başlatma
@@ -241,7 +217,7 @@ func (cm *CallManager) onAidDistributionMessage(call *Call, message *RedisCallDi
 	// Kilit serbest bırakılmadan tüm bilgiler Call struct'ına işlenmeliydi.
 	// Ancak Originate çağrıları I/O bloklamalı olabileceği için, her denemeyi
 	// Go rutininde başlatıp kilidi serbest bırakmamız gerekir.
-	call.mu.Unlock() // Kilit serbest bırakıldı
+	call.Unlock() // Kilit serbest bırakıldı
 
 	// 4. Dağıtım Denemelerini Başlatma (Her kullanıcı için Go rutini)
 
@@ -259,15 +235,15 @@ func (cm *CallManager) startDistributionAttempt(call *Call, user UserDist, attem
 	channelID := fmt.Sprintf("%s-agent-%s-%d", call.UniqueId, user.Username, attemptNumber)
 
 	// 3. Call Struct'ına Ekleme (Kilit gerekli)
-	call.mu.Lock()
+	call.Lock()
 	call.IsCallInDistribution = true
 	call.ConnectedAgentId = user.ID
-	call.mu.Unlock()
+	call.Unlock()
 
 	// 4. Cache/Redis Güncelleme
 	//ds.CallCache.AddOutboundChannel(channelID, call)
 
-	CustomLog(LevelDebug, "[%s] Starting distribution attempt to agent %s (%d) on channel %s",
+	clog(LevelDebug, "[%s] Starting distribution attempt to agent %s (%d) on channel %s",
 		call.UniqueId, user.Username, user.ID, channelID)
 
 	// 5. ARI İşlemi (Originate)
@@ -279,4 +255,39 @@ func (cm *CallManager) startDistributionAttempt(call *Call, user UserDist, attem
 
 	// NOT: Java'daki .timeout() ve .subscribe() mantığı, Go'da ARI olayları dinleyicisinde (listenApp)
 	// ve Scheduler'ınızda (zamanlayıcı) yönetilmelidir.
+}
+
+func terminateChannel(channelId string, callUniqueId string, ariClient ari.Client) {
+	if channelId != "" {
+		agentChannelHandle := ariClient.Channel().Get(ari.NewKey(ari.ChannelKey, channelId))
+		if agentChannelHandle.ID() != "" {
+			clog(LevelTrace, "Agent channel(%s) is deleting for the call (%s)", channelId, callUniqueId)
+			err := agentChannelHandle.Hangup()
+			if err != nil {
+				clog(LevelError, "Error while agentChannelHandle Hangup(ConnectedAgentChannelID) the agent channel : %s , error : %+v ", channelId, err)
+			}
+		} else {
+			clog(LevelTrace, "function agentChannelHandle.ID() did not return any channel handle for the channel id (%s) of the call (%s)", channelId, callUniqueId)
+		}
+	} else {
+		clog(LevelTrace, "Any channel is found for hangup , call id : %s", callUniqueId)
+	}
+}
+
+func terminateBridge(bridgeChannelId string, callUniqueId string, ariClient ari.Client) {
+	if bridgeChannelId != "" {
+		bridgeKey := ari.NewKey(ari.BridgeKey, bridgeChannelId)
+		bridgeHandle := ariClient.Bridge().Get(bridgeKey)
+		if bridgeHandle.ID() != "" {
+			clog(LevelTrace, "Bridge(%s) is deleting, Call Id : %s", bridgeChannelId, callUniqueId)
+			err := bridgeHandle.Delete()
+			if err != nil {
+				clog(LevelError, "Error while deleting the bridge : %s , error : %+v ", bridgeChannelId, err)
+			}
+		} else {
+			clog(LevelTrace, "function bridgeHandle.ID() did not return any bridge handle for the bridge channel id (%s) of the call (%s)", bridgeChannelId, callUniqueId)
+		}
+	} else {
+		clog(LevelTrace, "Any bridge is found for deleting , call id : %s", callUniqueId)
+	}
 }

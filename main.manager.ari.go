@@ -17,21 +17,21 @@ func NewClientManager() *ClientManager {
 }
 
 func (cm *ClientManager) AddClient(connectiondId string, cl ari.Client) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	cm.Lock()
+	defer cm.Unlock()
 	cm.clients[connectiondId] = cl
 }
 
 func (cm *ClientManager) GetClient(connectiondId string) (ari.Client, bool) {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	cm.RLock()
+	defer cm.RUnlock()
 	cl, ok := cm.clients[connectiondId]
 	return cl, ok
 }
 
 // runApp, tek bir ARI bağlantısını kurar ve olayları dinler.
 func runApp(ctx context.Context, cfg *AriConfig, manager *ClientManager, ariAppInfo AriAppInfo) error {
-	CustomLog(LevelInfo, "Connecting to ARI: %s - %s - %s -%t", ariAppInfo.ConnectionName, ariAppInfo.InboundAppName, ariAppInfo.OutboundAppName, ariAppInfo.IsOutboundApplication)
+	clog(LevelInfo, "Connecting to ARI: %s - %s - %s -%t", ariAppInfo.ConnectionName, ariAppInfo.InboundAppName, ariAppInfo.OutboundAppName, ariAppInfo.IsOutboundApplication)
 
 	ariConnectionApplicationName := ""
 	if ariAppInfo.IsOutboundApplication {
@@ -57,19 +57,19 @@ func runApp(ctx context.Context, cfg *AriConfig, manager *ClientManager, ariAppI
 	cl, err := native.Connect(options)
 
 	if err != nil {
-		CustomLog(LevelError, "Native.Connect Error %+v", err)
+		clog(LevelError, "Native.Connect Error %+v", err)
 		return err
 	}
 
 	asteriskInfo, err := cl.Asterisk().Info(nil) // nil: varsayılan seçenekler
 	if err != nil {
-		CustomLog(LevelError, "Error %+v , AsterixInfo : %+v", err, asteriskInfo)
+		clog(LevelError, "Error %+v , AsterixInfo : %+v", err, asteriskInfo)
 		return err
 	}
 
 	// İstemciyi Yöneticiye Kaydet
 	manager.AddClient(ariAppInfo.ConnectionName, cl)
-	CustomLog(LevelInfo, "Client registered and listening: %s", ariAppInfo.ConnectionName)
+	clog(LevelInfo, "Client registered and listening: %s", ariAppInfo.ConnectionName)
 
 	// Olay dinlemesini başlat (bloklamaz)
 	go listenApp(ctx, cl, ariAppInfo)
@@ -96,7 +96,7 @@ func DebugARIInfo(url, user, pass string) {
 // handleAriEvent, gelen tüm ARI Event arayüzlerini işler. (Java'daki onSuccess eşleniği)
 func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 
-	CustomLog(LevelInfo, "Ari Event : %+v", msg)
+	clog(LevelInfo, "Ari Event : %+v", msg)
 
 	appName := msg.GetApplication()
 
@@ -112,28 +112,28 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 	switch v := msg.(type) {
 
 	case *ari.StasisStart:
-		CustomLog(LevelInfo, "[%s] StasisStart: Channel %s entered. Args: %v", appName, channelID, v.Args)
+		clog(LevelInfo, "[%s] StasisStart: Channel %s entered. Args: %v", appName, channelID, v.Args)
 		// Kanala özgü işleyiciyi başlat
 		h := cl.Channel().Get(v.Key(ari.ChannelKey, v.Channel.ID))
 		go handleStasisStartMessage(msg.(*ari.StasisStart), cl, h, ariAppInfo)
 	case *ari.StasisEnd:
-		CustomLog(LevelInfo, "[%s] StasisEnd: Channel %s left.", appName, channelID)
+		clog(LevelInfo, "[%s] StasisEnd: Channel %s left.", appName, channelID)
 		h := cl.Channel().Get(v.Key(ari.ChannelKey, v.Channel.ID))
 		go handleStasisEndMessage(msg.(*ari.StasisEnd), cl, h, ariAppInfo)
 	case *ari.ChannelEnteredBridge:
-		CustomLog(LevelDebug, "[%s] ChannelEnteredBridge: Channel %s joined bridge %s", appName, channelID, v.Bridge.ID)
+		clog(LevelDebug, "[%s] ChannelEnteredBridge: Channel %s joined bridge %s", appName, channelID, v.Bridge.ID)
 
 	case *ari.ChannelLeftBridge:
-		CustomLog(LevelDebug, "[%s] ChannelLeftBridge: Channel %s left bridge %s", appName, channelID, v.Bridge.ID)
+		clog(LevelDebug, "[%s] ChannelLeftBridge: Channel %s left bridge %s", appName, channelID, v.Bridge.ID)
 
 	case *ari.PlaybackStarted:
-		CustomLog(LevelDebug, "[%s] PlaybackStarted: Playback %s started on %s", appName, v.Playback.ID, channelID)
+		clog(LevelDebug, "[%s] PlaybackStarted: Playback %s started on %s", appName, v.Playback.ID, channelID)
 
 	case *ari.PlaybackFinished:
-		CustomLog(LevelDebug, "[%s] PlaybackFinished: Playback %s finished on %s", appName, v.Playback.ID, channelID)
+		clog(LevelDebug, "[%s] PlaybackFinished: Playback %s finished on %s", appName, v.Playback.ID, channelID)
 
 	case *ari.ChannelDtmfReceived:
-		CustomLog(LevelInfo, "[%s] ChannelDtmfReceived: Channel %s, Digit: %s", appName, channelID, v.Digit)
+		clog(LevelInfo, "[%s] ChannelDtmfReceived: Channel %s, Digit: %s", appName, channelID, v.Digit)
 
 	case *ari.Dial:
 		peerID := ""
@@ -142,27 +142,27 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 		if v.Peer.ID != "" {
 			peerID = v.Peer.ID
 		}
-		CustomLog(LevelInfo, "[%s] Dial: Status: %s, Peer: %s", appName, v.Dialstatus, peerID)
+		clog(LevelInfo, "[%s] Dial: Status: %s, Peer: %s", appName, v.Dialstatus, peerID)
 		go handleDialMessage(msg.(*ari.Dial))
 
 	case *ari.ChannelVarset:
-		CustomLog(LevelTrace, "[%s] ChannelVarset: Channel %s, Var: %s, Value: %s", appName, channelID, v.Variable, v.Value)
+		clog(LevelTrace, "[%s] ChannelVarset: Channel %s, Var: %s, Value: %s", appName, channelID, v.Variable, v.Value)
 
 	case *ari.ChannelStateChange:
-		CustomLog(LevelDebug, "[%s] ChannelStateChange: Channel %s is now %s", appName, v.Channel.ID, v.Channel.State)
+		clog(LevelDebug, "[%s] ChannelStateChange: Channel %s is now %s", appName, v.Channel.ID, v.Channel.State)
 
 	case *ari.ChannelDialplan:
-		CustomLog(LevelTrace, "[%s] ChannelDialplan: Channel %s entered app %s", appName, channelID, v.DialplanApp)
+		clog(LevelTrace, "[%s] ChannelDialplan: Channel %s entered app %s", appName, channelID, v.DialplanApp)
 
 	default:
-		CustomLog(LevelTrace, "[%s] Unhandled Event Type: %s", appName, msg.GetType())
+		clog(LevelTrace, "[%s] Unhandled Event Type: %s", appName, msg.GetType())
 	}
 }
 
 // listenApp, tüm ARI olaylarını dinleyen sonsuz döngüyü çalıştırır.
 func listenApp(ctx context.Context, cl ari.Client, ariAppInfo AriAppInfo) {
 
-	CustomLog(LevelInfo, "Listen App %s , connectionId : %s", cl.ApplicationName(), ariAppInfo.ConnectionName)
+	clog(LevelInfo, "Listen App %s , connectionId : %s", cl.ApplicationName(), ariAppInfo.ConnectionName)
 
 	allEvents := cl.Bus().Subscribe(nil, "StasisStart", "StasisEnd", "ChannelEnteredBridge", "ChannelLeftBridge", "PlaybackStarted", "PlaybackFinished", "ChannelVarset", "ChannelStateChange", "ChannelDialplan", "ChannelDtmfReceived", "Dial")
 	defer allEvents.Cancel()
@@ -172,7 +172,7 @@ func listenApp(ctx context.Context, cl ari.Client, ariAppInfo AriAppInfo) {
 		select {
 		case e := <-allEvents.Events():
 			if e == nil {
-				CustomLog(LevelTrace, "Event boş")
+				clog(LevelTrace, "Event boş")
 				continue
 			}
 
@@ -180,7 +180,7 @@ func listenApp(ctx context.Context, cl ari.Client, ariAppInfo AriAppInfo) {
 			go handleAriEvent(e, cl, ariAppInfo)
 
 		case <-ctx.Done():
-			CustomLog(LevelInfo, "Listener shutting down...")
+			clog(LevelInfo, "Listener shutting down...")
 			return
 		}
 	}
@@ -199,7 +199,7 @@ func makeCall(cl ari.Client) (h *ari.ChannelHandle, err error) {
 /*
 func channelHandler(cl ari.Client, h *ari.ChannelHandle) {
 
-	CustomLog(LevelInfo, "Running channel handler for channel %s , appname : %s", h.ID(), cl.ApplicationName())
+	clog(LevelInfo, "Running channel handler for channel %s , appname : %s", h.ID(), cl.ApplicationName())
 
 	stateChange := h.Subscribe(ari.Events.ChannelStateChange)
 	defer stateChange.Cancel()
@@ -215,7 +215,7 @@ func channelHandler(cl ari.Client, h *ari.ChannelHandle) {
 
 	// İşlem bittiğinde kapat
 	h.Hangup() //nolint:errcheck
-	CustomLog(LevelInfo, "Channel %s hung up.", h.ID())
+	clog(LevelInfo, "Channel %s hung up.", h.ID())
 }
 */
 
@@ -231,7 +231,7 @@ func startHeartbeatMonitor(client ari.Client) {
 
 			if err != nil {
 				// Hata varsa, bağlantı büyük ihtimalle koptu
-				CustomLog(LevelError, "ARI Heartbeat failed. Reconnecting...")
+				clog(LevelError, "ARI Heartbeat failed. Reconnecting...")
 
 				// Yeniden bağlanma mantığınızı burada çağırın
 				newClient, reconnErr := ReconnectAri(client)
@@ -241,7 +241,7 @@ func startHeartbeatMonitor(client ari.Client) {
 					globalClientManager.ReplaceClient(newClient)
 					return
 				}
-				CustomLog(LevelError, "Failed to reconnect: %v. Retrying...", reconnErr)
+				clog(LevelError, "Failed to reconnect: %v. Retrying...", reconnErr)
 			}
 			// ... Uygulama kapatıldığında çıkış sinyali de buraya eklenebilir
 		}

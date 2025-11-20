@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -181,10 +182,37 @@ func getSimpleBool(b sql.NullBool) bool {
 }
 
 func logCallInfo(call *Call, addedText string) {
-	call.mu.RLock()
+	call.RLock()
 	callJSON, _ := json.MarshalIndent(call, "", "  ")
-	call.mu.RUnlock()
-	CustomLog(LevelInfo, "[CALL]%s, %s", addedText, callJSON)
+	call.RUnlock()
+	clog(LevelInfo, "[CALL]%s, %s", addedText, callJSON)
+}
+
+func logAnyInfo(data any, explainText string) {
+	// 1. Kilit mekanizması (Aynen kalıyor)
+	if locker, ok := data.(interface {
+		RLock()
+		RUnlock()
+	}); ok {
+		locker.RLock()
+		defer locker.RUnlock()
+	}
+
+	// 2. Tip İsmini Bulma (YENİ KISIM)
+	t := reflect.TypeOf(data)
+
+	// Eğer data bir pointer ise (örn: *Call), asıl struct'ın ismini almak için .Elem() kullanırız.
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	typeName := t.Name() // Örneğin: "Call", "Customer", "Order"
+
+	// 3. JSON Dönüştürme
+	jsonData, _ := json.MarshalIndent(data, "", "  ")
+
+	// 4. Loglama
+	// [ANY] yerine dinamik olarak [%s] ile tip ismini yazdırıyoruz.
+	clog(LevelInfo, "[%s]%s, %s", typeName, explainText, string(jsonData))
 }
 
 func parseNonStandardFormat(input string) (map[string]interface{}, error) {
@@ -235,32 +263,32 @@ func DeserializeCallSetupWithParser(callSetupString string) *CallSetup {
 	// 1. Özel Parser ile standart dışı string'i Go Map'ine dönüştür
 	dataMap, err := parseNonStandardFormat(callSetupString)
 	if err != nil {
-		CustomLog(LevelError, "ERROR: Failed to parse non-standard format: %v", err)
+		clog(LevelError, "ERROR: Failed to parse non-standard format: %v", err)
 		return nil
 	}
 
-	CustomLog(LevelInfo, "DDDDDDDDDD %s", dataMap)
+	clog(LevelInfo, "DDDDDDDDDD %s", dataMap)
 
 	// 2. Map'i Geçerli Bir JSON Byte Dizisine Dönüştürme
 	// Bu adım, Go'nun Map'i standart JSON kurallarına uygun olarak tırnaklar.
 	jsonBytes, err := json.Marshal(dataMap)
 	if err != nil {
-		CustomLog(LevelError, "ERROR: Failed to marshal map to JSON: %v", err)
+		clog(LevelError, "ERROR: Failed to marshal map to JSON: %v", err)
 		return nil
 	}
 
-	CustomLog(LevelInfo, "EEEEEEEEEE %s", string(jsonBytes))
+	clog(LevelInfo, "EEEEEEEEEE %s", string(jsonBytes))
 
 	// 3. Oluşturulan Geçerli JSON'u CallSetup yapısına çözümleme
 	callSetup := &CallSetup{}
 	err = json.Unmarshal(jsonBytes, callSetup)
 
 	if err != nil {
-		CustomLog(LevelError, "ERROR: Could not unmarshal valid JSON to CallSetup struct: %v. JSON: %s", err, string(jsonBytes))
+		clog(LevelError, "ERROR: Could not unmarshal valid JSON to CallSetup struct: %v. JSON: %s", err, string(jsonBytes))
 		return nil
 	}
 
-	CustomLog(LevelInfo, "SCXXXXXXXXXXXXXXXXXXXXX %s %s ", callSetup.ParentId, callSetup.QueueName)
+	clog(LevelInfo, "SCXXXXXXXXXXXXXXXXXXXXX %s %s ", callSetup.ParentId, callSetup.QueueName)
 
 	return callSetup
 }

@@ -13,7 +13,7 @@ import (
 func InitQueueManager() {
 	// DB bağlantısı zaten globalDB'de olmalı.
 	if globalDB == nil {
-		CustomLog(LevelFatal, "QueueManager başlatılamadı: Global DB bağlantısı mevcut değil.")
+		clog(LevelFatal, "QueueManager başlatılamadı: Global DB bağlantısı mevcut değil.")
 		return
 	}
 
@@ -23,7 +23,7 @@ func InitQueueManager() {
 		Cache: make(map[string]*Queue),
 		// Mutex, struct tanımında kalır.
 	}
-	CustomLog(LevelInfo, "Queue önbellek yöneticisi başlatıldı.")
+	clog(LevelInfo, "Queue önbellek yöneticisi başlatıldı.")
 	loadingIsOkForQueueDefinition = true
 }
 
@@ -31,7 +31,7 @@ func InitAriConnection(ctx context.Context) {
 
 	globalClientManager = NewClientManager()
 
-	CustomLog(LevelInfo, "Ari connections is starting...")
+	clog(LevelInfo, "Ari connections is starting...")
 	// 3. ARI Bağlantılarını Başlat
 	for _, ariCfg := range AppConfig.AriConnections {
 
@@ -47,13 +47,13 @@ func InitAriConnection(ctx context.Context) {
 
 			go func(ariCfg AriConfig, ariAppInfoInbound AriAppInfo) {
 				if err := runApp(ctx, &ariCfg, globalClientManager, ariAppInfoInbound); err != nil {
-					CustomLog(LevelError, "ARI application failed to start for %+v: %v", ariAppInfoOutbound, err)
+					clog(LevelError, "ARI application failed to start for %+v: %v", ariAppInfoOutbound, err)
 				}
 			}(ariCfg, ariAppInfoInbound)
 
 			go func(ariCfg AriConfig, ariAppInfoOutbound AriAppInfo) {
 				if err := runApp(ctx, &ariCfg, globalClientManager, ariAppInfoOutbound); err != nil {
-					CustomLog(LevelError, "ARI application failed to start for %+v: %v", ariAppInfoOutbound, err)
+					clog(LevelError, "ARI application failed to start for %+v: %v", ariAppInfoOutbound, err)
 				}
 			}(ariCfg, ariAppInfoOutbound)
 		}
@@ -72,11 +72,11 @@ func InitRedisManager(ctx context.Context) {
 	redisClientManager.ctx = &ctx
 
 	// Bu redis clinet sadece publish işlemleri için kullanılır
-	AppConfig.Mu.RLock()
+	AppConfig.RLock()
 	redisAddresses := AppConfig.RedisAddresses
 	redisPassword := AppConfig.RedisPassword
 	instanceIds := AppConfig.InstanceIDs
-	AppConfig.Mu.RUnlock()
+	AppConfig.RUnlock()
 
 	redisClientManager.Subs = redis.NewClusterClient(&redis.ClusterOptions{
 		Addrs:    redisAddresses,
@@ -84,7 +84,7 @@ func InitRedisManager(ctx context.Context) {
 	})
 
 	if redisClientManager.Subs == nil {
-		CustomLog(LevelFatal, "[REDIS SUBSCRIBE] Redis istemcisi atanmamış (rdb is nil)")
+		clog(LevelFatal, "[REDIS SUBSCRIBE] Redis istemcisi atanmamış (rdb is nil)")
 		return
 	}
 
@@ -94,7 +94,7 @@ func InitRedisManager(ctx context.Context) {
 	})
 
 	if redisClientManager.Pubs == nil {
-		CustomLog(LevelFatal, "[REDIS PUBLISHERR] Redis istemcisi atanmamış (rdb is nil)")
+		clog(LevelFatal, "[REDIS PUBLISHER] Redis istemcisi atanmamış (rdb is nil)")
 		return
 	}
 
@@ -103,7 +103,7 @@ func InitRedisManager(ctx context.Context) {
 
 func InitSchedulerManager() {
 	globalScheduler = NewScheduler()
-	CustomLog(LevelInfo, "Scheduler Manager is started.")
+	clog(LevelInfo, "Scheduler Manager is started.")
 }
 
 // InitDBConnection, SQL Server bağlantısını kurar ve globalDB'yi ayarlar.
@@ -111,8 +111,8 @@ func InitDBConnection() error {
 
 	// Windows kimlik doğrulaması (Integrated Security) için bağlantı dizesi
 
-	AppConfig.Mu.RLock()
-	defer AppConfig.Mu.RUnlock()
+	AppConfig.RLock()
+	defer AppConfig.RUnlock()
 
 	if AppConfig.DBConnectingString == "" {
 		return fmt.Errorf("DBConnectingString")
@@ -134,37 +134,37 @@ func InitDBConnection() error {
 	// Temel bağlantıyı global alana atama
 	globalDB = db
 
-	CustomLog(LevelInfo, "[DB] SQL Server connection established successfully.")
+	clog(LevelInfo, "[DB] SQL Server connection established successfully.")
 	loadingIsOkForDBManager = true
 	return nil
 }
 
 func InitCallManager() {
 	globalCallManager = NewCallManager()
-	CustomLog(LevelInfo, "Çağrı yöneticisi başlatıldı.")
+	clog(LevelInfo, "Çağrı yöneticisi başlatıldı.")
 }
 
 func InitHttpServer() {
 	if AppConfig.HttpServerEnabled {
 		startHttpEnabled()
 	} else {
-		CustomLog(LevelInfo, "HTTP Server is disabled via config.")
+		clog(LevelInfo, "HTTP Server is disabled via config.")
 	}
 }
 
 func WaitForServicesReady(ctx context.Context) {
 
-	CustomLog(LevelInfo, "Hizmetlerin hazır olması bekleniyor...")
+	clog(LevelInfo, "Hizmetlerin hazır olması bekleniyor...")
 
 	for {
 		// 1. Koşul Kontrolü
 		if loadingIsOkForDBManager && loadingIsOkForQueueDefinition {
-			CustomLog(LevelInfo, "\n✅ Tüm gereklilikler (HTTP, DB, QueueDef) sağlandı!")
+			clog(LevelInfo, "\n✅ Tüm gereklilikler (HTTP, DB, QueueDef) sağlandı!")
 			break // Döngüden çık
 		}
 
 		// 2. Durum Raporu (İsteğe bağlı)
-		CustomLog(LevelInfo, "Bekleniyor... DB: %t, QueueDef: %t\n",
+		clog(LevelInfo, "Bekleniyor... DB: %t, QueueDef: %t\n",
 			loadingIsOkForDBManager, loadingIsOkForQueueDefinition)
 
 		// 3. Duraklama

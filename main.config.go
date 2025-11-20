@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -41,7 +40,7 @@ func handleLogDirectory(w http.ResponseWriter, valueStr string) {
 		// Dizin mevcut değilse, oluştur
 		if err := os.MkdirAll(newDir, 0755); err != nil {
 			errMsg := fmt.Sprintf("HATA: Log dizini oluşturulamadı/erişilemiyor (%s). Hata: %v", newDir, err)
-			CustomLog(LevelError, "%s", errMsg)
+			clog(LevelError, "%s", errMsg)
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
@@ -54,27 +53,27 @@ func handleLogDirectory(w http.ResponseWriter, valueStr string) {
 
 		if err != nil {
 			errMsg := fmt.Sprintf("HATA: Dizin yazma izni yok veya dosya sistemi hatası (%s). Hata: %v", newDir, err)
-			CustomLog(LevelError, "%s", errMsg)
+			clog(LevelError, "%s", errMsg)
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
 	}
 
 	// 2. GÜVENLİ YAZMA: AppConfig değerini güncelle
-	AppConfig.Mu.Lock()
+	AppConfig.Lock()
 	AppConfig.LogDirectory = newDir
-	AppConfig.Mu.Unlock()
+	AppConfig.Unlock()
 
 	logDirectoryChanged = true
 
 	if err := saveAppConfigToDisk(); err != nil {
 		http.Error(w, fmt.Sprintf("[CHANGE LOG DIRECTORY] Konfigürasyon güncellendi, ancak diske yazma hatası: %v", err), http.StatusInternalServerError)
-		CustomLog(LevelError, "[CONFIG SAVE ERROR] LogDirectory degeri %s olarak guncellendi, ancak diske yazma hatasi: %v", newDir, err)
+		clog(LevelError, "[CONFIG SAVE ERROR] LogDirectory degeri %s olarak guncellendi, ancak diske yazma hatasi: %v", newDir, err)
 		return
 	}
 
 	// 4. Başarılı yanıt
-	CustomLog(LevelInfo, "[CHANGE LOG DIRECTORY] LogDirectory değişmesi için sinyal yollandı: %s", newDir)
+	clog(LevelInfo, "[CHANGE LOG DIRECTORY] LogDirectory değişmesi için sinyal yollandı: %s", newDir)
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "[CHANGE LOG DIRECTORY] LogDirectory değişmesi iiçin sinyal yollandı : %s", newDir)
 }
@@ -85,7 +84,7 @@ func handleLogLevel(w http.ResponseWriter, cmd string) {
 
 	configUpdated := true
 
-	AppConfig.Mu.Lock()
+	AppConfig.Lock()
 
 	switch strings.ToLower(cmd) { // Komutu küçük harfe çevirerek karşılaştır
 	case "loglevelinfo":
@@ -108,7 +107,7 @@ func handleLogLevel(w http.ResponseWriter, cmd string) {
 		http.Error(w, fmt.Sprintf("Bilinmeyen Loglevel: %s", cmd), http.StatusBadRequest)
 	}
 
-	AppConfig.Mu.Unlock()
+	AppConfig.Unlock()
 
 	if configUpdated {
 
@@ -116,10 +115,10 @@ func handleLogLevel(w http.ResponseWriter, cmd string) {
 		err := saveAppConfigToDisk()
 		if err != nil {
 			fmt.Fprintf(w, "[LOGL_EVEL_CHANGED] Set to %s, bu not saved to config file", logLevelTag)
-			CustomLog(LevelInfo, "[LOGL_EVEL_CHANGED] Set to %s, bu not saved to config file, err : %+v", logLevelTag, err)
+			clog(LevelInfo, "[LOGL_EVEL_CHANGED] Set to %s, bu not saved to config file, err : %+v", logLevelTag, err)
 		} else {
 			fmt.Fprintf(w, "[LOGL_EVEL_CHANGED] Set to : %s", logLevelTag)
-			CustomLog(LevelInfo, "[LOGL_EVEL_CHANGED] Set to %s", logLevelTag)
+			clog(LevelInfo, "[LOGL_EVEL_CHANGED] Set to %s", logLevelTag)
 		}
 
 	} else {
@@ -148,9 +147,9 @@ func handleBooleanConfig(w http.ResponseWriter, paramName string, valueStr strin
 
 	switch paramName {
 	case "LoadSnapshotOnStart":
-		AppConfig.Mu.Lock()
+		AppConfig.Lock()
 		AppConfig.LoadSnapshotOnStart = value
-		AppConfig.Mu.Unlock()
+		AppConfig.Unlock()
 		configUpdated = true
 		// Eğer gelecekte başka boolean ayarlarınız olursa buraya eklenecektir.
 	}
@@ -159,14 +158,14 @@ func handleBooleanConfig(w http.ResponseWriter, paramName string, valueStr strin
 		// 4. BAŞARILI GÜNCELLEME SONRASI DISKE YAZMA İŞLEMİ
 		if err := saveAppConfigToDisk(); err != nil {
 			http.Error(w, fmt.Sprintf("Konfigürasyon güncellendi, ancak diske yazma hatası: %v", err), http.StatusInternalServerError)
-			CustomLog(LevelError, "[CONFIG SAVE ERROR] %s degeri %t olarak guncellendi, ancak diske yazma hatasi: %v", paramName, value, err)
+			clog(LevelError, "[CONFIG SAVE ERROR] %s degeri %t olarak guncellendi, ancak diske yazma hatasi: %v", paramName, value, err)
 			return
 		}
 
 		// 5. Başarılı yanıt
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "%s degeri %t olarak guncellendi ve config.json dosyasina yazildi.", paramName, value)
-		CustomLog(LevelInfo, "[CONFIG UPDATE] %s degeri %t olarak guncellendi ve diske kaydedildi.", paramName, value)
+		clog(LevelInfo, "[CONFIG UPDATE] %s degeri %t olarak guncellendi ve diske kaydedildi.", paramName, value)
 	} else {
 		http.Error(w, "Konfigürasyon parametresi bulunamadi veya eşleştirilemedi.", http.StatusInternalServerError)
 	}
@@ -189,15 +188,15 @@ func handleIntConfig(w http.ResponseWriter, paramName string, valueStr string) {
 	// 3. AppConfig yapısındaki ilgili alanı güncelleme (Kilitleme zorunlu)
 	var configUpdated bool
 
-	AppConfig.Mu.Lock()
+	AppConfig.Lock()
 
 	switch paramName {
 
 	default:
-		CustomLog(LevelInfo, "%d", value)
+		clog(LevelInfo, "%d", value)
 	}
 
-	AppConfig.Mu.Unlock()
+	AppConfig.Unlock()
 
 	if configUpdated {
 		// Başarılı yanıt
@@ -205,10 +204,10 @@ func handleIntConfig(w http.ResponseWriter, paramName string, valueStr string) {
 		err := saveAppConfigToDisk()
 		if err != nil {
 			fmt.Fprintf(w, "%s degeri %d olarak guncellendi, fakat dosyaya kalıcı olarak yazılamadı!!!", paramName, value)
-			CustomLog(LevelInfo, "[CONFIG UPDATE] %s degeri %d olarak guncellendi. Error : %+v", paramName, value, err)
+			clog(LevelInfo, "[CONFIG UPDATE] %s degeri %d olarak guncellendi. Error : %+v", paramName, value, err)
 		} else {
 			fmt.Fprintf(w, "%s degeri %d olarak guncellendi.", paramName, value)
-			CustomLog(LevelInfo, "[CONFIG UPDATE] %s degeri %d olarak guncellendi.", paramName, value)
+			clog(LevelInfo, "[CONFIG UPDATE] %s degeri %d olarak guncellendi.", paramName, value)
 		}
 
 	} else {
@@ -232,8 +231,6 @@ func loadConfig(path string) (Config, error) {
 		log.Printf("[ERROR] :config JSON çözümlenemedi: %+v", err)
 		return cfg, err
 	}
-
-	cfg.Mu = &sync.RWMutex{}
 
 	return cfg, nil
 }

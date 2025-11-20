@@ -11,31 +11,31 @@ func handleOnAidDistributionMessage(payload string) {
 	var rcdMessage RedisCallDistributionMessage
 
 	if err := json.Unmarshal([]byte(payload), &rcdMessage); err != nil {
-		CustomLog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage %v %s", err, payload)
+		clog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage %v %s", err, payload)
 		return
 	}
 
 	if rcdMessage.InstanceID == "" || rcdMessage.InteractionID == "" || rcdMessage.QueueName == "" || len(rcdMessage.Users) == 0 || rcdMessage.Users[0].Username == "" || rcdMessage.Users[0].ID == 0 {
-		CustomLog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage eksik alanlar var %s", payload)
+		clog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage eksik alanlar var %s", payload)
 		return
 	}
-	AppConfig.Mu.RLock()
+	AppConfig.RLock()
 	instanceIDs := AppConfig.InstanceIDs
-	AppConfig.Mu.RUnlock()
+	AppConfig.RUnlock()
 
 	if !containsString(instanceIDs, rcdMessage.InstanceID) {
-		CustomLog(LevelDebug, "[AID_DIST] Bu instance bu sunucuya ait değil, InstanceId : %s", rcdMessage.InstanceID)
+		clog(LevelDebug, "[AID_DIST] Bu instance bu sunucuya ait değil, InstanceId : %s", rcdMessage.InstanceID)
 		return
 	}
 
 	call, found := globalCallManager.GetCall(rcdMessage.InteractionID)
 
 	if !found {
-		CustomLog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage çağrı bulunamadı %s", payload)
+		clog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage çağrı bulunamadı %s", payload)
 		return
 	}
 
-	CustomLog(LevelInfo, "[AID_DIST] Çağrı bulundu %s", payload)
+	clog(LevelInfo, "[AID_DIST] Çağrı bulundu %s", payload)
 
 	go globalCallManager.onAidDistributionMessage(call, &rcdMessage)
 
@@ -45,7 +45,7 @@ func PublishNewInteractionMessage(newInteraction NewCallInteraction) error {
 
 	payloadBytes, err := json.Marshal(newInteraction)
 	if err != nil {
-		CustomLog(LevelError, "[REDIS PUBLISH] Hata : PublishNewInterActionMessage json marshal %v", err)
+		clog(LevelError, "[REDIS PUBLISH] Hata : PublishNewInterActionMessage json marshal %v", err)
 		return err
 	}
 	redisChannelName := REDIS_NEW_INTERACTION_CHANNEL
@@ -58,7 +58,7 @@ func PublishInteractionStateMessage(interactionState InteractionState) error {
 
 	payloadBytes, err := json.Marshal(interactionState)
 	if err != nil {
-		CustomLog(LevelError, "[REDIS PUBLISH] Hata : PublishInteractionStateMessage json marshal %v", err)
+		clog(LevelError, "[REDIS PUBLISH] Hata : PublishInteractionStateMessage json marshal %v", err)
 		return err
 	}
 	redisChannelName := REDIS_INTERACTION_STATE_CHANNEL
@@ -70,7 +70,7 @@ func PublishInteractionStateMessage(interactionState InteractionState) error {
 func PublishMessageViaRedis(redisChannelName string, payload []byte) error {
 
 	if redisClientManager.Pubs == nil {
-		CustomLog(LevelFatal, "[REDIS SUBSCRIBE] Redis istemcisi atanmamış (rdb is nil)")
+		clog(LevelFatal, "[REDIS SUBSCRIBE] Redis istemcisi atanmamış (rdb is nil)")
 		return nil
 	}
 
@@ -79,11 +79,11 @@ func PublishMessageViaRedis(redisChannelName string, payload []byte) error {
 
 	// Hata kontrolü
 	if cmd.Err() != nil {
-		CustomLog(LevelError, "[REDIS PUBLISH ERROR] Mesaj yayınlama hatası: Kanal=%s, Hata=%+v", redisChannelName, cmd.Err())
+		clog(LevelError, "[REDIS PUBLISH ERROR] Mesaj yayınlama hatası: Kanal=%s, Hata=%+v", redisChannelName, cmd.Err())
 		return cmd.Err()
 	}
 
-	CustomLog(LevelInfo, "[REDIS PUBLISH] Başarılı. Kanal: %s, Payload: %s", redisChannelName, string(payload))
+	clog(LevelInfo, "[REDIS PUBLISH] Başarılı. Kanal: %s, Payload: %s", redisChannelName, string(payload))
 	return nil
 }
 
@@ -100,11 +100,11 @@ func handleRedisSubsMessages(ctx context.Context, instanceIds []string) {
 	go func() {
 		defer pubsub.Close() // Goroutine sonlandığında aboneliği kapatır.
 
-		CustomLog(LevelInfo, "[REDIS] %s kanallarına abone olundu.", channels)
+		clog(LevelInfo, "[REDIS] %s kanallarına abone olundu.", channels)
 		ch := pubsub.Channel()
 
 		for msg := range ch {
-			CustomLog(LevelInfo, "[REDIS] 1 Mesaj Alındı. Kanal: %s, Payload: %s", msg.Channel, msg.Payload)
+			clog(LevelInfo, "[REDIS] 1 Mesaj Alındı. Kanal: %s, Payload: %s", msg.Channel, msg.Payload)
 
 			redisMessageChannelName := msg.Channel
 
@@ -117,7 +117,7 @@ func handleRedisSubsMessages(ctx context.Context, instanceIds []string) {
 			switch msg.Channel {
 
 			default:
-				CustomLog(LevelError, "[REDIS] Bilinmeyen kanaldan mesaj alındı: %s", msg.Channel)
+				clog(LevelError, "[REDIS] Bilinmeyen kanaldan mesaj alındı: %s", msg.Channel)
 			}
 		}
 	}()

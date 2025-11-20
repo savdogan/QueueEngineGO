@@ -273,20 +273,20 @@ type InteractionState struct {
 }
 
 type Config struct {
-	Environment         string        `json:"Environment"`
-	RedisAddresses      []string      `json:"RedisAddresses"`
-	InstanceIDs         []string      `json:"InstanceIDs"`
-	RedisPassword       string        `json:"RedisPassword"`
-	LoadSnapshotOnStart bool          `json:"LoadSnapshotOnStart"`
-	MinLogLevel         LogLevel      `json:"MinLogLevel"`
-	PublisherHostName   string        `json:"PublisherHostName"`
-	LogDirectory        string        `json:"LogDirectory"`
-	HttpServerEnabled   bool          `json:"HttpServerEnabled"`
-	Version             int           `json:"Version"`
-	HttpPort            int           `json:"HttpPort"`
-	Mu                  *sync.RWMutex // Yapılandırma okuma/yazma işlemleri için
-	AriConnections      []AriConfig   `json:"ari_connections"`
-	DBConnectingString  string        `json:"DBConnectingString"`
+	sync.RWMutex                    // Yapılandırma okuma/yazma işlemleri için
+	Environment         string      `json:"Environment"`
+	RedisAddresses      []string    `json:"RedisAddresses"`
+	InstanceIDs         []string    `json:"InstanceIDs"`
+	RedisPassword       string      `json:"RedisPassword"`
+	LoadSnapshotOnStart bool        `json:"LoadSnapshotOnStart"`
+	MinLogLevel         LogLevel    `json:"MinLogLevel"`
+	PublisherHostName   string      `json:"PublisherHostName"`
+	LogDirectory        string      `json:"LogDirectory"`
+	HttpServerEnabled   bool        `json:"HttpServerEnabled"`
+	Version             int         `json:"Version"`
+	HttpPort            int         `json:"HttpPort"`
+	AriConnections      []AriConfig `json:"ari_connections"`
+	DBConnectingString  string      `json:"DBConnectingString"`
 }
 
 type AriConfig struct {

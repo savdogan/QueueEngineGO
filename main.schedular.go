@@ -56,8 +56,8 @@ func (h *TaskHeap) Pop() any {
 
 // Scheduler: İşleri yöneten ana yapı.
 type Scheduler struct {
-	mu sync.Mutex // Eş zamanlı erişim kontrolü
-	pq TaskHeap   // Priority Queue (Heap)
+	sync.Mutex          // Eş zamanlı erişim kontrolü
+	pq         TaskHeap // Priority Queue (Heap)
 
 	// CallID'ye ait task'ları tutan harita. İptal için HIZLI erişim sağlar.
 	cancellationMap map[string][]*ScheduledTask
@@ -70,13 +70,13 @@ type Scheduler struct {
 func (s *Scheduler) run() {
 	var timer *time.Timer
 	for {
-		s.mu.Lock()
+		s.Lock()
 
 		// En yakın işi kontrol et
 		if s.pq.Len() == 0 {
 			// İş yok. Sonsuza kadar yeni bir iş gelmesini bekleriz.
 			timer = nil
-			s.mu.Unlock()
+			s.Unlock()
 
 			// İş gelene kadar wakeUp kanalında kilitlen.
 			<-s.wakeUp
@@ -86,7 +86,7 @@ func (s *Scheduler) run() {
 		// En yakın işin zamanını al
 		nextTask := s.pq[0]
 		delay := time.Until(nextTask.ExecuteAt)
-		s.mu.Unlock() // Lock'u bekleme süresince serbest bırak
+		s.Unlock() // Lock'u bekleme süresince serbest bırak
 
 		if delay <= 0 {
 			// İşin zamanı dolmuş, hemen çalıştır.
@@ -116,8 +116,8 @@ func (s *Scheduler) run() {
 
 // ScheduleTask: Yeni bir işi zamanlar.
 func (s *Scheduler) ScheduleTask(callID string, delay time.Duration, action func()) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.Lock()
+	defer s.Unlock()
 
 	executeAt := time.Now().Add(delay)
 	task := &ScheduledTask{
@@ -139,8 +139,8 @@ func (s *Scheduler) ScheduleTask(callID string, delay time.Duration, action func
 
 // CancelByCallID: Belirli bir CallID'ye ait tüm işleri iptal eder.
 func (s *Scheduler) CancelByCallID(callID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.Lock()
+	defer s.Unlock()
 
 	tasks, found := s.cancellationMap[callID]
 	if !found {
@@ -166,14 +166,14 @@ func (s *Scheduler) CancelByCallID(callID string) {
 
 // executeNextTask: Sıradaki işi Heap'ten çıkarır ve çalıştırır.
 func (s *Scheduler) executeNextTask() {
-	s.mu.Lock()
+	s.Lock()
 
 	task := heap.Pop(&s.pq).(*ScheduledTask)
 
 	// Map'ten de bu işi temizlememiz gerekir. (Burada basitlik için tüm listeyi değil, sadece task'ın kendisini temizlemeliyiz,
 	// ancak bu örnekte map'teki task listesini basitleştirmek için tam iptal sırasında temizliği yaptık)
 
-	s.mu.Unlock()
+	s.Unlock()
 
 	//fmt.Printf("[%s] *** İŞ BAŞLATILDI *** CallID: %s, Zaman: %v\n", time.Now().Format("15:04:05.000"), task.CallID, task.ExecuteAt.Format("15:04:05"))
 
@@ -185,7 +185,7 @@ func (s *Scheduler) executeNextTask() {
 
 	// İşi haritadan temizleme adımı:
 	// İşin CallID'sine bağlı birden çok task olabilir. Çalışan task'ı listeden çıkar.
-	s.mu.Lock()
+	s.Lock()
 	if tasks, ok := s.cancellationMap[task.CallID]; ok {
 		// Çalışan task'ı listeden çıkar
 		for i, t := range tasks {
@@ -199,5 +199,5 @@ func (s *Scheduler) executeNextTask() {
 			delete(s.cancellationMap, task.CallID)
 		}
 	}
-	s.mu.Unlock()
+	s.Unlock()
 }
