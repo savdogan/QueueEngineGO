@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -75,6 +76,52 @@ func runApp(ctx context.Context, cfg *AriConfig, manager *ClientManager, ariAppI
 	go listenApp(ctx, cl, ariAppInfo)
 
 	return nil
+}
+
+func InitAriConnection() {
+
+	clog(LevelInfo, "Ari connections are starting...")
+
+	for _, ariCfg := range g.Cfg.AriConnections {
+		for _, instanceId := range g.Cfg.InstanceIDs {
+
+			// 1. Ortak İsimlendirmeleri Hazırla
+			appInbound := fmt.Sprintf("%s%s", INBOUND_ARI_APPLICATION_PREFIX, instanceId)
+			appOutbound := fmt.Sprintf("%s%s", OUTBOUND_ARI_APPLICATION_PREFIX, instanceId)
+
+			// 2. App Bilgilerini Oluştur (Struct Literal kullanarak daha okunaklı hale getirildi)
+			inboundInfo := AriAppInfo{
+				ConnectionName:        fmt.Sprintf("%s-%s-%s", ariCfg.Id, appInbound, instanceId),
+				InboundAppName:        appInbound,
+				OutboundAppName:       appOutbound,
+				IsOutboundApplication: false,
+				InstanceID:            instanceId,
+			}
+
+			outboundInfo := AriAppInfo{
+				ConnectionName:        fmt.Sprintf("%s-%s-%s", ariCfg.Id, appOutbound, instanceId),
+				InboundAppName:        appInbound,
+				OutboundAppName:       appOutbound,
+				IsOutboundApplication: true,
+				InstanceID:            instanceId,
+			}
+
+			// 3. Uygulamaları Başlat (Tekrarlayan kod Helper fonksiyona taşındı)
+			startAriApp(g.Ctx, ariCfg, inboundInfo)
+			startAriApp(g.Ctx, ariCfg, outboundInfo)
+		}
+	}
+}
+
+// startAriApp: Goroutine başlatma mantığını ve hata loglamayı tek bir yerde toplar.
+func startAriApp(ctx context.Context, cfg AriConfig, info AriAppInfo) {
+	go func() {
+		// runApp fonksiyonuna g.ACM'i buradan parametre olarak geçiyoruz
+		if err := runApp(ctx, &cfg, g.ACM, info); err != nil {
+			clog(LevelError, "ARI application failed to start for Connection: %s, Instance: %s. Error: %v",
+				info.ConnectionName, info.InstanceID, err)
+		}
+	}()
 }
 
 func DebugARIInfo(url, user, pass string) {
@@ -238,7 +285,7 @@ func startHeartbeatMonitor(client ari.Client) {
 				if reconnErr == nil {
 					// Yeniden bağlandı, global istemciyi güncelleyin ve bu Goroutine'den çıkın.
 					// (veya yeni istemciyi dinleyecek yeni bir Goroutine başlatın)
-					globalClientManager.ReplaceClient(newClient)
+					g.ACM.ReplaceClient(newClient)
 					return
 				}
 				clog(LevelError, "Failed to reconnect: %v. Retrying...", reconnErr)

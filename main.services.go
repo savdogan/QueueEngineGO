@@ -10,9 +10,9 @@ import (
 )
 
 func startHttpEnabled() {
-	manager := globalClientManager
+	manager := g.ACM
 	go func() {
-		listenAddr := fmt.Sprintf(":%d", AppConfig.HttpPort)
+		listenAddr := fmt.Sprintf(":%d", g.Cfg.HttpPort)
 		clog(LevelInfo, "Listening for HTTP requests on %s", listenAddr)
 
 		// HTTP Handler'ı tanımlama
@@ -119,8 +119,8 @@ func startHttpEnabled() {
 			case "setlogdirectory":
 				handleLogDirectory(w, valueStr) // Yeni handler'ı çağır
 			case "getconfig":
-				// AppConfig nesnesinin kilitlenmesini sağlayarak güvenli bir şekilde okuma yapılır.
-				configCopy := AppConfig // Yapının kopyasını al
+				// Cfg nesnesinin kilitlenmesini sağlayarak güvenli bir şekilde okuma yapılır.
+				configCopy := g.Cfg // Yapının kopyasını al
 				w.Header().Set("Content-Type", "application/json")
 				// Kopyalanan config verisi JSON'a serileştirilir
 				if err := json.NewEncoder(w).Encode(configCopy); err != nil {
@@ -191,9 +191,9 @@ func startHttpEnabled() {
 			//}
 		})
 
-		clog(LevelInfo, "[HTTP] Dinleniyor :%d (Metrics)", AppConfig.HttpPort)
-		if err := http.ListenAndServe(fmt.Sprintf(":%d", AppConfig.HttpPort), nil); err != nil && err != http.ErrServerClosed {
-			clog(LevelError, "Http server (port : %d) error: %v", AppConfig.HttpPort, err)
+		clog(LevelInfo, "[HTTP] Dinleniyor :%d (Metrics)", g.Cfg.HttpPort)
+		if err := http.ListenAndServe(fmt.Sprintf(":%d", g.Cfg.HttpPort), nil); err != nil && err != http.ErrServerClosed {
+			clog(LevelError, "Http server (port : %d) error: %v", g.Cfg.HttpPort, err)
 		}
 	}()
 }

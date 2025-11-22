@@ -19,7 +19,7 @@ func (cm *CallManager) setupPositionAnnounce(call_UniqueId string) {
 	call_PositionAnnouncePlayCount := call.PositionAnnouncePlayCount
 	call.RUnlock()
 
-	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
+	currentQueue, err := g.QCM.GetQueueByName(call_QueueName)
 
 	if err != nil {
 		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
@@ -45,7 +45,7 @@ func (cm *CallManager) setupPositionAnnounce(call_UniqueId string) {
 
 	initialDelay := time.Duration(queue_PositionAnnounceInitialDelay) * time.Second
 
-	globalScheduler.ScheduleTask(call_UniqueId, initialDelay, func() {
+	g.SM.ScheduleTask(call_UniqueId, initialDelay, func() {
 		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_PositionAnnounce)
 	})
 
@@ -71,7 +71,7 @@ func (cm *CallManager) setupActionAnnounce(call_UniqueId string) {
 	call_ActionAnnounceProhibition := call.ActionAnnounceProhibition
 	call.RUnlock()
 
-	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
+	currentQueue, err := g.QCM.GetQueueByName(call_QueueName)
 
 	if err != nil {
 		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
@@ -101,7 +101,7 @@ func (cm *CallManager) setupActionAnnounce(call_UniqueId string) {
 
 	initialDelay := time.Duration(queue_ActionAnnounceInitialDelay) * time.Second
 
-	globalScheduler.ScheduleTask(call_UniqueId, initialDelay, func() {
+	g.SM.ScheduleTask(call_UniqueId, initialDelay, func() {
 		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_ActionAnnounce)
 	})
 
@@ -129,7 +129,7 @@ func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
 	call_PeriodicPlayAnnounceCount := call.PeriodicPlayAnnounceCount
 	call.RUnlock()
 
-	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
+	currentQueue, err := g.QCM.GetQueueByName(call_QueueName)
 
 	if err != nil {
 		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call.UniqueId, call.QueueName)
@@ -176,7 +176,7 @@ func (cm *CallManager) setupPeriodicAnnounce(call_UniqueId string) {
 	call_PeriodicAnnouncePlayCount := call.PeriodicPlayAnnounceCount
 	call.RUnlock()
 
-	currentQueue, err := globalQueueManager.GetQueueByName(call_QueueName)
+	currentQueue, err := g.QCM.GetQueueByName(call_QueueName)
 
 	if err != nil {
 		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
@@ -201,7 +201,7 @@ func (cm *CallManager) setupPeriodicAnnounce(call_UniqueId string) {
 
 	initialDelay := time.Duration(queue_PeriodicAnnounceInitialDelay) * time.Second
 
-	globalScheduler.ScheduleTask(call_UniqueId, initialDelay, func() {
+	g.SM.ScheduleTask(call_UniqueId, initialDelay, func() {
 		processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_PeriodicAnnounce)
 	})
 
@@ -224,11 +224,11 @@ func processQueueAction(call_UniqueId string, action CALL_SCHEDULED_ACTION) {
 
 	switch action {
 	case CALL_SCHEDULED_ACTION_QueueTimeout:
-		globalCallManager.runActionQueueTimeOut(call_UniqueId)
+		g.CM.runActionQueueTimeOut(call_UniqueId)
 	case CALL_SCHEDULED_ACTION_ClientAnnounce:
-		globalCallManager.runActionClientAnnounce(call_UniqueId)
+		g.CM.runActionClientAnnounce(call_UniqueId)
 	case CALL_SCHEDULED_ACTION_PeriodicAnnounce:
-		globalCallManager.runActionPeriodicAnnounce(call_UniqueId)
+		g.CM.runActionPeriodicAnnounce(call_UniqueId)
 	default:
 		clog(LevelWarn, "Unknown scheduled action: %s for Call: %s", action, call_UniqueId)
 	}
@@ -284,13 +284,13 @@ func (cm *CallManager) runActionClientAnnounce(call_UniqueId string) {
 
 func (cm *CallManager) startMoh(call *Call) error {
 
-	globalQueueManager.RLock()
-	defer globalQueueManager.RUnlock()
+	g.QCM.RLock()
+	defer g.QCM.RUnlock()
 
-	globalClientManager.Lock()
-	defer globalClientManager.Unlock()
+	g.ACM.Lock()
+	defer g.ACM.Unlock()
 
-	currentQueue, err := globalQueueManager.GetQueueByName(call.QueueName)
+	currentQueue, err := g.QCM.GetQueueByName(call.QueueName)
 
 	if err != nil {
 		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call.UniqueId, call.QueueName)
@@ -303,7 +303,7 @@ func (cm *CallManager) startMoh(call *Call) error {
 		clog(LevelDebug, "currentQueue.MusicClass is empty. Using Default MOH Class for Call Moh Start , Call Id : %s", call.UniqueId)
 	}
 
-	ariClient, found := globalClientManager.GetClient(call.ConnectionId)
+	ariClient, found := g.ACM.GetClient(call.ConnectionId)
 
 	if !found {
 		clog(LevelError, "ARI Client not found for Call Moh Start , Call Application : %s , Call Id : %s", call.Application, call.UniqueId)

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -21,85 +19,23 @@ func terminateApplication(sleepTime time.Duration) {
 
 func main() {
 
-	runtime.SetBlockProfileRate(1)
-
 	version := 1
+
+	runtime.SetBlockProfileRate(1)
 
 	log.Printf("QueueEngineGO version:%d is starting...", version)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cfg := loadConfig("config.json")
 
-	// 1. KONFİGÜRASYONU Yükle
-	cfg, err := loadConfig("config.json")
-	if err != nil {
-		log.Printf("Failed to load config: %v", err)
-		return
-	}
-	AppConfig = cfg
+	InitGlobalState(cfg, version)
 
-	log.Printf("Successed to load config")
+	startAsyncLogger()
 
-	cfgPublisherHostName := getHostname()
-	cfgLogDirectory = AppConfig.LogDirectory
-	cfgMinLogLevel = AppConfig.MinLogLevel
-	//redisAddresses := AppConfig.RedisAddresses
-	//redisPassword := AppConfig.RedisPassword
-	//LoadSnapshotOnStart := AppConfig.LoadSnapshotOnStart
-	AppConfig.Lock()
-	AppConfig.PublisherHostName = cfgPublisherHostName
-	AppConfig.Version = version
-	log.Printf("PublisherHostName : %s", AppConfig.PublisherHostName)
-	AppConfig.Unlock()
+	go startRedisListener()
 
-	//------------LOG Bölümü Başlangıç
-	log.Printf("Async logging is starting, you can now follow it in the log file. ")
-	err = startAsyncLogger()
-	if err != nil {
-		log.Printf("Logging starting is failed.")
-		terminateApplication(5)
-	}
-	log.Printf("Async logging is started")
-	//------------LOG Bölümü Başlangıç
+	go InitHttpServer()
 
-	//------------DB Conncetion Bölümü Başlangıç
-	if err := InitDBConnection(); err != nil {
-		clog(LevelFatal, "Veritabanı bağlantısı kurulamadı: %v", err)
-		terminateApplication(5)
-		return
-	}
-	defer CloseDBConnection() // Uygulama sonlandığında bağlantıyı kapat
-	//------------DB Conncetion Bölümü Bitiş
-
-	InitSchedulerManager()
-
-	InitQueueManager()
-
-	InitCallManager()
-
-	InitHttpServer()
-
-	InitRedisManager(ctx)
-
-	WaitForServicesReady(ctx)
-
-	fmt.Println("[ARI CONNECTION] is starting...")
-
-	InitAriConnection(ctx)
-
-	go func() {
-
-		// Kullanım Örneği (Örneğin StasisStart geldikten sonra)
-		queueName := "Yuktesti" // Varsayımsal kuyruk adı
-		queueDef, err := globalQueueManager.GetQueueByName(queueName)
-
-		if err != nil {
-			// Kuyruk tanımı bulunamadı veya DB hatası var
-			clog(LevelError, "Kuyruk tanımı alınamadı: %v, %d", err, queueDef.ID)
-			return
-		}
-
-	}()
+	go InitAriConnection()
 
 	for range make(chan struct{}) {
 	} // Sonsuza kadar çalış

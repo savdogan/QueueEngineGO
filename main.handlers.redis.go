@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 )
@@ -19,16 +18,16 @@ func handleOnAidDistributionMessage(payload string) {
 		clog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage eksik alanlar var %s", payload)
 		return
 	}
-	AppConfig.RLock()
-	instanceIDs := AppConfig.InstanceIDs
-	AppConfig.RUnlock()
+	g.Cfg.RLock()
+	instanceIDs := g.Cfg.InstanceIDs
+	g.Cfg.RUnlock()
 
 	if !containsString(instanceIDs, rcdMessage.InstanceID) {
 		clog(LevelDebug, "[AID_DIST] Bu instance bu sunucuya ait değil, InstanceId : %s", rcdMessage.InstanceID)
 		return
 	}
 
-	call, found := globalCallManager.GetCall(rcdMessage.InteractionID)
+	call, found := g.CM.GetCall(rcdMessage.InteractionID)
 
 	if !found {
 		clog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage çağrı bulunamadı %s", payload)
@@ -37,7 +36,7 @@ func handleOnAidDistributionMessage(payload string) {
 
 	clog(LevelInfo, "[AID_DIST] Çağrı bulundu %s", payload)
 
-	go globalCallManager.onAidDistributionMessage(call, &rcdMessage)
+	go g.CM.onAidDistributionMessage(call, &rcdMessage)
 
 }
 
@@ -69,13 +68,13 @@ func PublishInteractionStateMessage(interactionState InteractionState) error {
 
 func PublishMessageViaRedis(redisChannelName string, payload []byte) error {
 
-	if redisClientManager.Pubs == nil {
+	if g.RPubs == nil {
 		clog(LevelFatal, "[REDIS SUBSCRIBE] Redis istemcisi atanmamış (rdb is nil)")
 		return nil
 	}
 
 	// 2. Mesajı Redis'e yayımlama
-	cmd := redisClientManager.Pubs.Publish(*redisClientManager.ctx, redisChannelName, payload)
+	cmd := g.RPubs.Publish(g.Ctx, redisChannelName, payload)
 
 	// Hata kontrolü
 	if cmd.Err() != nil {
@@ -87,15 +86,17 @@ func PublishMessageViaRedis(redisChannelName string, payload []byte) error {
 	return nil
 }
 
-func handleRedisSubsMessages(ctx context.Context, instanceIds []string) {
+func startRedisListener() {
 
 	var channels = []string{}
+
+	instanceIds := g.Cfg.InstanceIDs
 
 	for _, instanceId := range instanceIds {
 		channels = append(channels, REDIS_DISTIRIBITION_CHANNEL_PREFIX+instanceId)
 	}
 
-	pubsub := redisClientManager.Subs.Subscribe(ctx, channels...)
+	pubsub := g.RSubs.Subscribe(g.Ctx, channels...)
 
 	go func() {
 		defer pubsub.Close() // Goroutine sonlandığında aboneliği kapatır.
@@ -110,14 +111,15 @@ func handleRedisSubsMessages(ctx context.Context, instanceIds []string) {
 
 			//Birden faz instance oalbilir ona göre işlem yapacak sekilde kanalı normalize et
 			if strings.HasPrefix(redisMessageChannelName, REDIS_DISTIRIBITION_CHANNEL_PREFIX) {
-				handleOnAidDistributionMessage(msg.Payload)
-			}
+				go handleOnAidDistributionMessage(msg.Payload)
+			} else {
 
-			// Kanal tipine göre mesaj işleme mantığı
-			switch msg.Channel {
+				// Kanal tipine göre mesaj işleme mantığı
+				switch msg.Channel {
 
-			default:
-				clog(LevelError, "[REDIS] Bilinmeyen kanaldan mesaj alındı: %s", msg.Channel)
+				default:
+					clog(LevelError, "[REDIS] Bilinmeyen kanaldan mesaj alındı: %s", msg.Channel)
+				}
 			}
 		}
 	}()

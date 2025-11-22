@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-func saveAppConfigToDisk() error {
-	// 1. AppConfig'i JSON formatına serileştir
-	data, err := json.MarshalIndent(AppConfig, "", "  ")
+func saveConfigToDisk() error {
+	// 1. Cfg'i JSON formatına serileştir
+	data, err := json.MarshalIndent(g.Cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("config serileştirme hatasi: %w", err)
 	}
@@ -59,14 +59,14 @@ func handleLogDirectory(w http.ResponseWriter, valueStr string) {
 		}
 	}
 
-	// 2. GÜVENLİ YAZMA: AppConfig değerini güncelle
-	AppConfig.Lock()
-	AppConfig.LogDirectory = newDir
-	AppConfig.Unlock()
+	// 2. GÜVENLİ YAZMA: Cfg değerini güncelle
+	g.Cfg.Lock()
+	g.Cfg.LogDirectory = newDir
+	g.Cfg.Unlock()
 
 	logDirectoryChanged = true
 
-	if err := saveAppConfigToDisk(); err != nil {
+	if err := saveConfigToDisk(); err != nil {
 		http.Error(w, fmt.Sprintf("[CHANGE LOG DIRECTORY] Konfigürasyon güncellendi, ancak diske yazma hatası: %v", err), http.StatusInternalServerError)
 		clog(LevelError, "[CONFIG SAVE ERROR] LogDirectory degeri %s olarak guncellendi, ancak diske yazma hatasi: %v", newDir, err)
 		return
@@ -84,35 +84,35 @@ func handleLogLevel(w http.ResponseWriter, cmd string) {
 
 	configUpdated := true
 
-	AppConfig.Lock()
+	g.Cfg.Lock()
 
 	switch strings.ToLower(cmd) { // Komutu küçük harfe çevirerek karşılaştır
 	case "loglevelinfo":
 		logLevelTag = "LevelInfo"
-		AppConfig.MinLogLevel = LevelInfo
+		g.Cfg.MinLogLevel = LevelInfo
 	case "logleveldebug":
 		logLevelTag = "LevelDebug"
-		AppConfig.MinLogLevel = LevelDebug
+		g.Cfg.MinLogLevel = LevelDebug
 	case "loglevelerror":
 		logLevelTag = "LevelError"
-		AppConfig.MinLogLevel = LevelError
+		g.Cfg.MinLogLevel = LevelError
 	case "loglevelwarn":
 		logLevelTag = "LevelWarn"
-		AppConfig.MinLogLevel = LevelWarn
+		g.Cfg.MinLogLevel = LevelWarn
 	case "logleveltrace":
 		logLevelTag = "LevelTrace"
-		AppConfig.MinLogLevel = LevelTrace
+		g.Cfg.MinLogLevel = LevelTrace
 	default:
 		configUpdated = false
 		http.Error(w, fmt.Sprintf("Bilinmeyen Loglevel: %s", cmd), http.StatusBadRequest)
 	}
 
-	AppConfig.Unlock()
+	g.Cfg.Unlock()
 
 	if configUpdated {
 
 		w.WriteHeader(http.StatusOK)
-		err := saveAppConfigToDisk()
+		err := saveConfigToDisk()
 		if err != nil {
 			fmt.Fprintf(w, "[LOGL_EVEL_CHANGED] Set to %s, bu not saved to config file", logLevelTag)
 			clog(LevelInfo, "[LOGL_EVEL_CHANGED] Set to %s, bu not saved to config file, err : %+v", logLevelTag, err)
@@ -147,16 +147,16 @@ func handleBooleanConfig(w http.ResponseWriter, paramName string, valueStr strin
 
 	switch paramName {
 	case "LoadSnapshotOnStart":
-		AppConfig.Lock()
-		AppConfig.LoadSnapshotOnStart = value
-		AppConfig.Unlock()
+		g.Cfg.Lock()
+		g.Cfg.LoadSnapshotOnStart = value
+		g.Cfg.Unlock()
 		configUpdated = true
 		// Eğer gelecekte başka boolean ayarlarınız olursa buraya eklenecektir.
 	}
 
 	if configUpdated {
 		// 4. BAŞARILI GÜNCELLEME SONRASI DISKE YAZMA İŞLEMİ
-		if err := saveAppConfigToDisk(); err != nil {
+		if err := saveConfigToDisk(); err != nil {
 			http.Error(w, fmt.Sprintf("Konfigürasyon güncellendi, ancak diske yazma hatası: %v", err), http.StatusInternalServerError)
 			clog(LevelError, "[CONFIG SAVE ERROR] %s degeri %t olarak guncellendi, ancak diske yazma hatasi: %v", paramName, value, err)
 			return
@@ -185,10 +185,10 @@ func handleIntConfig(w http.ResponseWriter, paramName string, valueStr string) {
 		return
 	}
 
-	// 3. AppConfig yapısındaki ilgili alanı güncelleme (Kilitleme zorunlu)
+	// 3. Cfg yapısındaki ilgili alanı güncelleme (Kilitleme zorunlu)
 	var configUpdated bool
 
-	AppConfig.Lock()
+	g.Cfg.Lock()
 
 	switch paramName {
 
@@ -196,12 +196,12 @@ func handleIntConfig(w http.ResponseWriter, paramName string, valueStr string) {
 		clog(LevelInfo, "%d", value)
 	}
 
-	AppConfig.Unlock()
+	g.Cfg.Unlock()
 
 	if configUpdated {
 		// Başarılı yanıt
 		w.WriteHeader(http.StatusOK)
-		err := saveAppConfigToDisk()
+		err := saveConfigToDisk()
 		if err != nil {
 			fmt.Fprintf(w, "%s degeri %d olarak guncellendi, fakat dosyaya kalıcı olarak yazılamadı!!!", paramName, value)
 			clog(LevelInfo, "[CONFIG UPDATE] %s degeri %d olarak guncellendi. Error : %+v", paramName, value, err)
@@ -215,22 +215,22 @@ func handleIntConfig(w http.ResponseWriter, paramName string, valueStr string) {
 	}
 }
 
-func loadConfig(path string) (Config, error) {
+func loadConfig(path string) *Config {
 	var cfg Config
 
 	// Dosyayı oku
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Printf("[ERROR] :config dosyası okunamadi: %+v", err)
-		return cfg, err
+		log.Fatalf("[ERROR] :config dosyası okunamadi: %+v", err)
 	}
 
 	// JSON verisini struct'a çözümle
 	err = json.Unmarshal(data, &cfg)
 	if err != nil {
-		log.Printf("[ERROR] :config JSON çözümlenemedi: %+v", err)
-		return cfg, err
+		log.Fatalf("[ERROR] :config JSON çözümlenemedi: %+v", err)
 	}
 
-	return cfg, nil
+	log.Printf("Successed to load config")
+
+	return &cfg
 }

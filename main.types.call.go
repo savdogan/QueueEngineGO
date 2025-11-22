@@ -42,16 +42,17 @@ type Call struct {
 	Bridge                    string `json:"bridge,omitempty"`
 	ReturnOnHangup            bool   `json:"returnOnHangup"`
 	PositionTimestamp         int64  `json:"positionTimestamp"`
-	ConnectedAgentId          int64  `json:"connectedAgentId,omitempty"`
 	ActionAnnounceProhibition bool   `json:"actionAnnounceProhibition"`
 	DialContext               string `json:"dialContext,omitempty"`
 	ActionContext             string `json:"actionContext,omitempty"`
 	QueueTimeout              int    `json:"queueTimeout,omitempty"`
 	ConferenceRoomId          string `json:"conferenceRoomId,omitempty"`
 	IvrIteration              int    `json:"ivrIteration,omitempty"`
-	ConnectedAgentChannelID   string `json:"connectedAgentChannelID,omitempty"`
 
-	IsCallInDistribution bool `json:"isCallInDistribution,omitempty"`
+	ConnectedAgentId        int64  `json:"connectedAgentId,omitempty"`
+	ConnectedUserName       string `json:"ConnectedUserName,omitempty"`
+	ConnectedAgentChannelID string `json:"connectedAgentChannelID,omitempty"`
+	IsCallInDistribution    bool   `json:"isCallInDistribution,omitempty"`
 
 	// --- Eşzamanlılık Alanları (JSON'dan hariç tutulur) ---
 	lock                      sync.Mutex `json:"-"`

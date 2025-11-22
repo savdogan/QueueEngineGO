@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// NewScheduler: Yeni bir Scheduler başlatır.
-func NewScheduler() *Scheduler {
-	s := &Scheduler{
+// NewSchedulerManager: Yeni bir ScheduleManager başlatır.
+func NewSchedulerManager() *ScheduleManager {
+	s := &ScheduleManager{
 		pq:              make(TaskHeap, 0),
 		cancellationMap: make(map[string][]*ScheduledTask),
 		wakeUp:          make(chan struct{}, 1),
@@ -52,10 +52,10 @@ func (h *TaskHeap) Pop() any {
 	return task
 }
 
-// --- 2. Scheduler Yapısı ---
+// --- 2. ScheduleManager Yapısı ---
 
-// Scheduler: İşleri yöneten ana yapı.
-type Scheduler struct {
+// ScheduleManager: İşleri yöneten ana yapı.
+type ScheduleManager struct {
 	sync.Mutex          // Eş zamanlı erişim kontrolü
 	pq         TaskHeap // Priority Queue (Heap)
 
@@ -67,7 +67,7 @@ type Scheduler struct {
 }
 
 // run: Arka planda çalışan ve işleri zamanında yürüten ana döngü.
-func (s *Scheduler) run() {
+func (s *ScheduleManager) run() {
 	var timer *time.Timer
 	for {
 		s.Lock()
@@ -115,7 +115,7 @@ func (s *Scheduler) run() {
 }
 
 // ScheduleTask: Yeni bir işi zamanlar.
-func (s *Scheduler) ScheduleTask(callID string, delay time.Duration, action func()) {
+func (s *ScheduleManager) ScheduleTask(callID string, delay time.Duration, action func()) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -138,7 +138,7 @@ func (s *Scheduler) ScheduleTask(callID string, delay time.Duration, action func
 }
 
 // CancelByCallID: Belirli bir CallID'ye ait tüm işleri iptal eder.
-func (s *Scheduler) CancelByCallID(callID string) {
+func (s *ScheduleManager) CancelByCallID(callID string) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -165,7 +165,7 @@ func (s *Scheduler) CancelByCallID(callID string) {
 }
 
 // executeNextTask: Sıradaki işi Heap'ten çıkarır ve çalıştırır.
-func (s *Scheduler) executeNextTask() {
+func (s *ScheduleManager) executeNextTask() {
 	s.Lock()
 
 	task := heap.Pop(&s.pq).(*ScheduledTask)

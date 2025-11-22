@@ -26,7 +26,8 @@ type QueueCacheManager struct {
 }
 
 type CallManager struct {
-	mu          sync.RWMutex
-	calls       map[string]*Call
-	outChannels map[string]*ari.ChannelHandle
+	sync.RWMutex
+	calls           map[string]*Call
+	outChannels     map[string]*ari.ChannelHandle
+	agentCalltoCall map[string]string
 }

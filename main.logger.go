@@ -76,7 +76,7 @@ func setLogFile() error {
 
 	var logFilePath string
 
-	// 2. AppConfig'deki LogDirectory alanını kontrol et
+	// 2. Cfg'deki LogDirectory alanını kontrol et
 	// Dizin ismini kontrol ederken trim ile baştaki/sondaki boşlukları temizlemek iyi bir uygulamadır.
 
 	logDir := cfgLogDirectory // Varsayımsal global değişken
@@ -118,11 +118,13 @@ var logDirectoryChanged = false
 // startAsyncLogger: Kanaldan okuyup dosyaya yazan goroutine'i başlatır (Adım 4)
 func startAsyncLogger() error {
 	if err := setLogFile(); err != nil {
-		log.Fatalf("Log sistemi başlatılamadı: %v", err)
-		return err
+		log.Fatalf("The log system could not be started. Error : %v", err)
 	}
 
 	go func() {
+
+		log.Printf("Async logging is starting, you can now follow it in the log file. ")
+
 		// Bu goroutine I/O işlemini yapar. Ana akışı etkilemez.
 		for logMsg := range logChannel {
 			// Günlük döndürme kontrolü ve yazma işlemi
