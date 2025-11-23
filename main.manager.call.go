@@ -59,11 +59,11 @@ func (cm *CallManager) queueProcessStart(call *Call) {
 		return
 	}
 
-	currentQueue.mu.RLock()
+	currentQueue.RLock()
 	queue_WaitTimeout := currentQueue.WaitTimeout
 	queue_ClientAnnounceMinEstimationTime := currentQueue.ClientAnnounceMinEstimationTime
 	queue_ClientAnnounceSoundFile := currentQueue.ClientAnnounceSoundFile
-	currentQueue.mu.RUnlock()
+	currentQueue.RUnlock()
 
 	//scheduleQueueTimeout
 	if queue_WaitTimeout > 0 {
@@ -145,7 +145,7 @@ func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINAT
 	}
 	call.State = CALL_STATE_Terminated
 	if call.TerminationReason == "" {
-		call.TerminationReason = terminationReason
+		call.SetTerminationReason(terminationReason)
 	}
 
 	call.Unlock() //------------------------------------------
@@ -167,6 +167,8 @@ func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINAT
 	g.CM.RemoveAgentCallMap(call_ConnectedAgentChannelID)
 
 	logAnyInfo(call, "Terminated Call")
+
+	call.LogOnTerminate()
 
 	cm.RemoveCall(call_UniqueId)
 
@@ -212,11 +214,11 @@ func (cm *CallManager) onAidDistributionMessage(call *Call, message *RedisCallDi
 		return
 	}
 
-	currentQueue.mu.RLock()
+	currentQueue.RLock()
 	queueID := message.QueueName
 	musicClassOnHold := currentQueue.MusicClassOnHold
 	agentAnnounceFile := currentQueue.Announce
-	currentQueue.mu.RUnlock()
+	currentQueue.RUnlock()
 
 	call.Lock() // Kilitleme
 
@@ -233,7 +235,7 @@ func (cm *CallManager) onAidDistributionMessage(call *Call, message *RedisCallDi
 	} else if call.DistributionAttemptNumber > 2 {
 		clog(LevelWarn, "[%s] call.DistributionAttemptNumber is reached.", call.UniqueId)
 		ariClient, found := g.ACM.GetClient(call.ConnectionName)
-		call.TerminationReason = CALL_TERMINATION_REASON_MaxAttemptReached
+		call.SetTerminationReason(CALL_TERMINATION_REASON_MaxAttemptReached)
 		call.Unlock()
 		if found {
 			g.CM.hangupChannel(call.ChannelId, call.UniqueId, ariClient, "")
@@ -246,6 +248,7 @@ func (cm *CallManager) onAidDistributionMessage(call *Call, message *RedisCallDi
 	call.IsCallInDistribution = true
 	call.ConnectedAgentId = agent.ID
 	call.ConnectedUserName = agent.Username
+	call.AttempStartTime = time.Now()
 
 	// 3. Logger Başlatma
 	//ds.QueueLogger.OnDistributionIterationStart()
@@ -371,5 +374,209 @@ func (cm *CallManager) terminateBridge(bridgeChannelId string, callUniqueId stri
 		}
 	} else {
 		clog(LevelTrace, "Any bridge is found for deleting , call id : %s", callUniqueId)
+	}
+}
+
+func (qLog *WbpQueueLog) calculateQueueWaitDuration(now time.Time) float64 {
+	// --- EKLENECEK KISIM ---
+	if qLog == nil {
+		return 0.0
+	}
+	// -----------------------
+
+	endTime := now
+	if qLog.ConnectTime != nil {
+		endTime = *qLog.ConnectTime
+	}
+
+	duration := endTime.Sub(qLog.ArrivalTime).Seconds()
+	if duration < 0 {
+		return 0
+	}
+	return duration
+}
+
+func (qLog *WbpQueueLog) calculateInCallDuration(now time.Time) float64 {
+
+	if qLog.ConnectTime == nil {
+		return 0.0
+	}
+	// Konuşma süresi: Ayrılma Zamanı (Now) - Bağlanma Zamanı
+	duration := now.Sub(*qLog.ConnectTime).Seconds()
+
+	if duration < 0 {
+		return 0
+	}
+	return duration
+}
+
+func (call *Call) LogOnConnectAttemptSuccess(lockCall bool) {
+
+	if lockCall {
+		call.Lock()
+		defer call.Unlock()
+	}
+
+	if call.QeueuLog == nil {
+		clog(LevelInfo, "Call Queue Log is empty: %s", call.UniqueId)
+		return
+	}
+
+	// Kolay erişim için alias
+	qLog := call.QeueuLog
+
+	// 2. Zaman Damgaları
+	// Java: System.nanoTime() ve new Date()
+	now := time.Now()
+
+	// Attempt nesnesini güncelleme
+	call.AttempEndTime = now
+	// attempt.QueueLog = qLog // Eğer struct içinde varsa set edilir.
+	if !call.AttempStartTime.IsZero() {
+		durationSec := now.Sub(call.AttempStartTime).Seconds()
+		qLog.ConnectAttemptsDuration += durationSec
+	}
+
+	// 4. Bağlanma Zamanı (Nullable olduğu için pointer atıyoruz)
+	qLog.ConnectTime = &now
+
+	pos := call.Position
+	qLog.FinalPosition = &pos
+
+	agentName := call.ConnectedUserName
+	agentID := call.ConnectedAgentId
+
+	qLog.ConnectedAgent = &agentName
+	qLog.ConnectedAgentID = &agentID
+
+	qLog.Handled = true
+}
+
+func (call *Call) LogOnConnectAttemptFail() {
+	// 1. Thread Safety (Java: synchronized)
+	call.Lock()
+	defer call.Unlock()
+
+	if call.QeueuLog == nil {
+		clog(LevelInfo, "Call Queue Log is empty: %s", call.UniqueId)
+		return
+	}
+
+	qLog := call.QeueuLog
+
+	now := time.Now()
+
+	call.AttempEndTime = now
+
+	if !call.AttempStartTime.IsZero() {
+		durationSec := now.Sub(call.AttempStartTime).Seconds()
+		qLog.ConnectAttemptsDuration += durationSec
+	}
+}
+
+func (call *Call) LogOnInit() {
+
+	call.Lock()
+	defer call.Unlock()
+
+	if call.QeueuLog == nil {
+		call.QeueuLog = &WbpQueueLog{}
+	}
+
+	qLog := call.QeueuLog
+
+	qLog.MediaUniqueID = call.GetMediaUniqueId()
+
+	currentQueue, err := g.QCM.GetQueueByName(call.QueueName)
+
+	if err == nil {
+		currentQueue.RLock()
+		qLog.QueueName = call.QueueName
+		qLog.QueueID = currentQueue.ID
+		currentQueue.RUnlock()
+	}
+
+	qLog.UniqueID = call.UniqueId
+	qLog.ParentID = call.ParentId
+
+	priority := call.Priority
+	qLog.Priority = &priority
+
+	if len(call.Skills) > 0 {
+		var skillStrs []string
+		for _, skillID := range call.Skills {
+			skillStrs = append(skillStrs, fmt.Sprintf("%d", skillID))
+		}
+		joinedSkills := strings.Join(skillStrs, ",")
+		qLog.Skills = &joinedSkills
+	}
+
+	if call.PreferredAgent != "" {
+		prefAgent := call.PreferredAgent
+		qLog.PreferredAgent = &prefAgent
+	}
+
+	qLog.ArrivalTime = time.Now()
+
+	qLog.MediaServerID = call.ServerId
+	qLog.QueueServiceID = call.InstanceID
+
+}
+
+// OnTerminate, çağrı sonlandığında logları hesaplar ve kaydeder.
+func (call *Call) LogOnTerminate() {
+	call.Lock()
+	defer call.Unlock()
+
+	if call.QeueuLog == nil {
+		clog(LevelInfo, "Call Queue Log is empty: %s", call.UniqueId)
+		return
+	}
+
+	qLog := call.QeueuLog
+
+	now := time.Now()
+	qLog.LeaveTime = &now
+
+	if qLog.FinalPosition == nil {
+		if !call.FinalPositionObtained {
+			// Simülasyon: aidFacade.updateFinalPosition(call)
+			// Eğer bu işlem Go tarafında bir metod ise buraya eklenmeli.
+			// Örn: s.updateFinalPosition()
+		}
+
+		// Call struct'ındaki Position int olduğu için pointer'a çevirip atıyoruz
+		pos := call.Position
+		qLog.FinalPosition = &pos
+	}
+
+	qLog.QueueResult = int64(call.QueueResult)
+
+	queueWaitDuration := qLog.calculateQueueWaitDuration(now)
+	inCallDuration := qLog.calculateInCallDuration(now)
+
+	callQueue, queueFound := g.QCM.GetQueueByName(call.QueueName)
+
+	if queueFound != nil {
+		callQueue.RLock()
+
+		targetSLThreshold := float64(callQueue.TargetServiceLevelThreshold)
+		shortAbandonedThreshold := float64(callQueue.ShortAbandonedThreshold)
+		// Service Level: Handled = true VE bekleme süresi hedefin altındaysa
+		qLog.ServiceLevel = qLog.Handled && (queueWaitDuration <= targetSLThreshold)
+		// Short Abandoned: Handled = false VE bekleme süresi eşiğin altındaysa
+		qLog.ShortAbandoned = !qLog.Handled && (queueWaitDuration <= shortAbandonedThreshold)
+
+		call.RUnlock()
+	}
+
+	qLog.QueueWaitDuration = queueWaitDuration
+	qLog.InCallDuration = inCallDuration
+	qLog.ConnectAttempts = call.DistributionAttemptNumber
+
+	clog(LevelInfo, "Saving QueueLog: %s", qLog.UniqueID)
+
+	if err := g.QCM.InsertQueueLog(qLog); err != nil {
+		clog(LevelError, "Could not save QueueLog: %v", err)
 	}
 }

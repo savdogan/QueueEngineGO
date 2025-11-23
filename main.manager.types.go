@@ -18,13 +18,6 @@ type DBManager struct {
 	DB *sql.DB
 }
 
-// QueueCacheManager, DB bağlantısını ve Queue önbelleğini yönetir.
-type QueueCacheManager struct {
-	sync.RWMutex // Cache erişimi için kilit
-	DB           *sql.DB
-	Cache        map[string]*Queue // Key: queue_name, Value: *WbpQueue
-}
-
 type CallManager struct {
 	sync.RWMutex
 	calls           map[string]*Call

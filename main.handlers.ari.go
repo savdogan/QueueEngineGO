@@ -30,7 +30,7 @@ func OnOutboundChannelLeave(message *ari.StasisEnd, cl ari.Client, h *ari.Channe
 		return
 	}
 
-	call.TerminationReason = CALL_TERMINATION_REASON_AgentHangup
+	call.SetTerminationReason(CALL_TERMINATION_REASON_AgentHangup)
 	ariClient, found := g.ACM.GetClient(call.ConnectionName)
 	if found {
 		g.CM.hangupChannel(call.ChannelId, call.UniqueId, ariClient, "")
@@ -79,12 +79,14 @@ func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Chan
 
 	// queueLogger.onConnectAttemptSuccess(attempt);
 	// TO DO: globalQueueLogger.OnConnectAttemptSuccess(attempt)
+	call.LogOnConnectAttemptSuccess(false)
 
 	// aidFacade.publishDistributionAttemptResult(...)
 	// TO DO: globalAidFacade.PublishDistributionAttemptResult(call.ParentId, AID_DISTRIBUTION_STATE_Accepted, attempt.Username, call.QueueName)
 
 	// callEventPublisher.publishCallQueueLeaveEvent(call);
 	// TO DO: globalCallEventPublisher.PublishCallQueueLeaveEvent(call)
+	go sendInteractionStateMessage(call, AID_DISTRIBUTION_STATE_Accepted, call.ConnectedUserName)
 
 	// 7. Mevcut Zamanlanmış Eylemleri İptal Etme (cancelCurrentActions())
 	g.SM.CancelByCallID(call_Uniqueu)
@@ -421,6 +423,8 @@ func onOutboundChannelNoAnswer(peerId string, callerId string, dialStatus string
 		return
 	}
 
+	call.LogOnConnectAttemptFail()
+
 	reSetupCallForQueue(call, nil, true)
 
 	go sendInteractionStateMessage(call, AID_DISTRIBUTION_STATE_Rejected, "")
@@ -439,21 +443,29 @@ func OnClientChannelLeave(message *ari.StasisEnd, cl ari.Client, h *ari.ChannelH
 		return
 	}
 
-	call.RLock()
+	call.Lock()
+
 	if call.State == CALL_STATE_Terminated {
 		clog(LevelInfo, "Call terminated before : %s", message.Channel.ID)
 		return
 	}
-	call.RUnlock()
 
-	go g.CM.terminateCall(call, CALL_TERMINATION_REASON_ClientHangup)
+	call_TerminationReason := CALL_TERMINATION_REASON_ClientHangup
+
+	if call.State == CALL_STATE_BridgedWithAgent {
+		call_TerminationReason = CALL_TERMINATION_REASON_Abandon
+	}
+
+	call.Unlock()
+
+	go g.CM.terminateCall(call, call_TerminationReason)
 
 }
 
 func OnClientChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
 	clog(LevelInfo, "Inbound kanalından giriş yapıldı..")
 
-	call := CreateCall(message, message.Channel.ID, message.Channel.Name, message.Args[0], 1)
+	call := CreateCall(message, message.Channel.ID, message.Channel.Name, message.Args[0], ariAppInfo.MediaServerId)
 
 	//To DO:  Önce ARI bağlantısını kontrol et ,  uygun değilse çağrıyı reddet
 
@@ -479,6 +491,7 @@ func OnClientChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Channe
 	call.ConnectionName = ariAppInfo.ConnectionName
 	call.OutBoundApplicationName = ariAppInfo.OutboundAppName
 	call.InstanceID = ariAppInfo.InstanceID
+	call.LogOnInit()
 
 	//To DO: AID bağlantısını kontrol et  , uygun değilse çağrıyı reddet
 

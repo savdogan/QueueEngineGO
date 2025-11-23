@@ -26,12 +26,12 @@ func (cm *CallManager) setupPositionAnnounce(call_UniqueId string) {
 		return
 	}
 
-	currentQueue.mu.RLock()
+	currentQueue.RLock()
 	queue_PositionAnnounceIsActive := currentQueue.ReportPosition
 	queue_PositionAnnouncePlayCount := 1000
 	queue_PositionAnnounceInitialDelay := currentQueue.PositionAnnounceInitialDelay
 	queue_PositionReportHoldTimeIsActive := currentQueue.ReportHoldTime
-	currentQueue.mu.RUnlock()
+	currentQueue.RUnlock()
 
 	if !queue_PositionAnnounceIsActive && !queue_PositionReportHoldTimeIsActive {
 		clog(LevelDebug, "Queue Position Announce setup skipped , Because : queue_PositionAnnounceIsActive and queue_PositionReportHoldTimeIsActive  are false: call id :  %s, queue name : %s", call_UniqueId, call_QueueName)
@@ -78,11 +78,11 @@ func (cm *CallManager) setupActionAnnounce(call_UniqueId string) {
 		return
 	}
 
-	currentQueue.mu.RLock()
+	currentQueue.RLock()
 	queue_ActionAnnounceSoundFile := currentQueue.ActionAnnounceSoundFile
 	queue_ActionAnnounceMaxPlayCount := currentQueue.ActionAnnounceMaxPlayCount
 	queue_ActionAnnounceInitialDelay := currentQueue.ActionAnnounceInitialDelay
-	currentQueue.mu.RUnlock()
+	currentQueue.RUnlock()
 
 	if queue_ActionAnnounceMaxPlayCount == 0 || call_ActionAnnounceProhibition {
 		clog(LevelDebug, "Queue Action Announce is not active or Action Announce Prohibition is true , so Action Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
@@ -136,10 +136,10 @@ func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
 		return
 	}
 
-	currentQueue.mu.RLock()
+	currentQueue.RLock()
 	queue_PeriodicAnnounce := currentQueue.PeriodicAnnounce
 	queue_PeriodicAnnounceMaxPlayCount := currentQueue.PeriodicAnnounceMaxPlayCount
-	currentQueue.mu.RUnlock()
+	currentQueue.RUnlock()
 
 	if queue_PeriodicAnnounce == "" {
 		clog(LevelDebug, "Queue Periodic Announce is empty , so Periodic Announce process skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
@@ -183,11 +183,11 @@ func (cm *CallManager) setupPeriodicAnnounce(call_UniqueId string) {
 		return
 	}
 
-	currentQueue.mu.RLock()
+	currentQueue.RLock()
 	queue_PeriodicAnnounce := currentQueue.PeriodicAnnounce
 	queue_PeriodicAnnouncePlayCount := currentQueue.PeriodicAnnounceMaxPlayCount
 	queue_PeriodicAnnounceInitialDelay := currentQueue.PeriodicAnnounceInitialDelay
-	currentQueue.mu.RUnlock()
+	currentQueue.RUnlock()
 
 	if queue_PeriodicAnnounce == "" {
 		clog(LevelDebug, "Queue Periodic Announce is empty , so Periodic Announce setup skipped , call id : %s, queue name : %s", call_UniqueId, call_QueueName)
@@ -245,17 +245,27 @@ func (cm *CallManager) runActionQueueTimeOut(call_UniqueId string) {
 		return
 	}
 
-	call.RLock()
-	call_State := call.State
-	call.RUnlock()
+	call.Lock()
 
-	if call_State != CALL_STATE_InQueue {
+	if call.State != CALL_STATE_InQueue {
 		clog(LevelDebug, "[CALL_PROCESS_INFO] call is not waiting , so queue wait time action ignored, call id : %s", call_UniqueId)
+		call.Unlock()
 		return
 	}
 
-	//To DO : Terminate Call Aksiyonları
+	clog(LevelWarn, "[%s] Queue wait time is reached.", call.UniqueId)
 
+	ariClient, found := g.ACM.GetClient(call.ConnectionName)
+
+	call.SetTerminationReason(CALL_TERMINATION_REASON_QueueWaitTimeReached)
+
+	call.Unlock()
+
+	g.SM.CancelByCallID(call_UniqueId)
+
+	if found {
+		g.CM.hangupChannel(call.ChannelId, call.UniqueId, ariClient, "")
+	}
 }
 
 func (cm *CallManager) runActionClientAnnounce(call_UniqueId string) {
@@ -297,10 +307,10 @@ func (cm *CallManager) startMoh(call *Call) error {
 		return err
 	}
 
-	musicClass := currentQueue.MusicClass
+	musicClass := currentQueuesicClass
 	if musicClass == "" {
 		musicClass = "Default"
-		clog(LevelDebug, "currentQueue.MusicClass is empty. Using Default MOH Class for Call Moh Start , Call Id : %s", call.UniqueId)
+		clog(LevelDebug, "currentQueuesicClass is empty. Using Default MOH Class for Call Moh Start , Call Id : %s", call.UniqueId)
 	}
 
 	ariClient, found := g.ACM.GetClient(call.ConnectionId)

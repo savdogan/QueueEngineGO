@@ -54,7 +54,7 @@ func wbpQueueToQueue(wbp WbpQueue) *Queue {
 		Type:                        wbp.Type,
 	}
 
-	q.mu.Lock()
+	q.Lock()
 
 	// Nullable String alanlar (Valid değilse -> "")
 	q.QueueName = getSimpleString(wbp.QueueName)
@@ -141,7 +141,7 @@ func wbpQueueToQueue(wbp WbpQueue) *Queue {
 	q.ResultCodeTimerEnabled = getSimpleBool(wbp.ResultCodeTimerEnabled)
 	q.ActionAnnounceWrongDtmfHandling = getSimpleBool(wbp.ActionAnnounceWrongDtmfHandling)
 
-	q.mu.Unlock()
+	q.Unlock()
 
 	return &q
 }
@@ -267,8 +267,6 @@ func DeserializeCallSetupWithParser(callSetupString string) *CallSetup {
 		return nil
 	}
 
-	clog(LevelInfo, "DDDDDDDDDD %s", dataMap)
-
 	// 2. Map'i Geçerli Bir JSON Byte Dizisine Dönüştürme
 	// Bu adım, Go'nun Map'i standart JSON kurallarına uygun olarak tırnaklar.
 	jsonBytes, err := json.Marshal(dataMap)
@@ -276,8 +274,6 @@ func DeserializeCallSetupWithParser(callSetupString string) *CallSetup {
 		clog(LevelError, "ERROR: Failed to marshal map to JSON: %v", err)
 		return nil
 	}
-
-	clog(LevelInfo, "EEEEEEEEEE %s", string(jsonBytes))
 
 	// 3. Oluşturulan Geçerli JSON'u CallSetup yapısına çözümleme
 	callSetup := &CallSetup{}
@@ -288,7 +284,43 @@ func DeserializeCallSetupWithParser(callSetupString string) *CallSetup {
 		return nil
 	}
 
-	clog(LevelInfo, "SCXXXXXXXXXXXXXXXXXXXXX %s %s ", callSetup.ParentId, callSetup.QueueName)
-
 	return callSetup
+}
+
+// GetQueueResultID, verilen string durum kodunun ID karşılığını döner.
+// Eğer tanımlı olmayan bir kod gelirse varsayılan olarak 1 (UNKNOWN_ERROR) döner.
+func GetQueueResultID(resultStr string) int {
+	// Gelen veriyi büyük harfe çevirerek map içinde arıyoruz
+	upperStr := strings.ToUpper(strings.TrimSpace(resultStr))
+
+	if id, ok := queueResultMap[upperStr]; ok {
+		return id
+	}
+
+	// Eğer listede yoksa varsayılan olarak UNKNOWN_ERROR (1) dönüyoruz
+	// Loglama mekanizmanız varsa burada "Bilinmeyen Result Code: X" diye log atabilirsiniz.
+	return ResultUnknownError
+}
+
+func GetQueueResultFromTerminationResult(terminationReason CALL_TERMINATION_REASON) QUEUE_RESULT {
+
+	switch terminationReason {
+	case CALL_TERMINATION_REASON_QueueWaitTimeReached:
+		return QUEUE_RESULT_Timeout
+	case CALL_TERMINATION_REASON_Abandon:
+		return QUEUE_RESULT_Abandon
+	case CALL_TERMINATION_REASON_AgentHangup:
+		return QUEUE_RESULT_AgentHangup
+	case CALL_TERMINATION_REASON_DeadChannel:
+		return QUEUE_RESULT_UnknownError
+	case CALL_TERMINATION_REASON_DialPlanHangup:
+		return QUEUE_RESULT_UnknownError
+	case CALL_TERMINATION_REASON_MaxAttemptReached:
+		return QUEUE_RESULT_MaxRejectLimit
+	case CALL_TERMINATION_REASON_ClientHangup:
+		return QUEUE_RESULT_ClientHangup
+	default:
+		return QUEUE_RESULT_UnknownError
+	}
+
 }

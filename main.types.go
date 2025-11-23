@@ -67,6 +67,7 @@ type AriAppInfo struct {
 	OutboundAppName       string `json:"outboundAppName"`
 	IsOutboundApplication bool   `json:"-"`
 	InstanceID            string `json:"instanceId"`
+	MediaServerId         int64  `json:"mediaServerId"`
 }
 
 // WbpQueue, [dbo].[wbp_queue] tablosunun bir satırını temsil eder.
@@ -157,8 +158,38 @@ type WbpQueue struct {
 	Migration                       sql.NullInt32  `json:"migration"`
 }
 
+type WbpQueueLog struct {
+	ID                      int64      `db:"id"`
+	QueueName               string     `db:"queue_name"`
+	QueueID                 int64      `db:"queue_id"`
+	UniqueID                string     `db:"uniqueid"`
+	ParentID                string     `db:"parentid"`
+	ArrivalTime             time.Time  `db:"arrival_time"`
+	ConnectTime             *time.Time `db:"connect_time"`            // Nullable
+	LeaveTime               *time.Time `db:"leave_time"`              // Nullable
+	InitialPosition         *int       `db:"initial_position"`        // Nullable
+	InitialWaitEstimation   *int       `db:"initial_wait_estimation"` // Nullable
+	FinalPosition           *int       `db:"final_position"`          // Nullable
+	Priority                *int       `db:"priority"`                // Nullable
+	Skills                  *string    `db:"skills"`                  // Nullable
+	PreferredAgent          *string    `db:"preferred_agent"`         // Nullable
+	Handled                 bool       `db:"handled"`
+	ConnectedAgent          *string    `db:"connected_agent"`    // Nullable
+	ConnectedAgentID        *int64     `db:"connected_agent_id"` // Nullable
+	ConnectAttempts         int64      `db:"connect_attempts"`
+	QueueWaitDuration       float64    `db:"queue_wait_duration"`
+	ConnectAttemptsDuration float64    `db:"connect_attempts_duration"`
+	InCallDuration          float64    `db:"in_call_duration"`
+	QueueResult             int64      `db:"queue_result"` // FK to wbp_queue_result
+	MediaServerID           int64      `db:"media_server_id"`
+	QueueServiceID          string     `db:"queue_service_id"`
+	ServiceLevel            bool       `db:"servicelevel"`
+	ShortAbandoned          bool       `db:"shortabandoned"`
+	MediaUniqueID           string     `db:"media_unique_id"` // Default newid() db tarafında var
+}
+
 type Queue struct {
-	mu                              sync.RWMutex `json:"-"` // Kuyruk yapısının eşzamanlı erişimi için kilit
+	sync.RWMutex                    `json:"-"` // Kuyruk yapısının eşzamanlı erişimi için kilit
 	ID                              int64
 	QueueName                       string
 	QueueDescription                string
@@ -290,7 +321,7 @@ type Config struct {
 }
 
 type AriConfig struct {
-	Id           string `json:"Id"`
+	Id           int64  `json:"Id"`
 	ConnectionId string `json:"-"`
 	WebsocketURL string `json:"WebsocketUrl"`
 	RestURL      string `json:"RestUrl"`
@@ -409,6 +440,8 @@ const (
 	QUEUE_RESULT_Abandon                QUEUE_RESULT = 8
 	QUEUE_RESULT_QeRestart              QUEUE_RESULT = 9
 	QUEUE_RESULT_MediaServerDisabled    QUEUE_RESULT = 10
+	QUEUE_RESULT_MaxRejectLimit         QUEUE_RESULT = 11
+	QUEUE_RESULT_MaxWaitTimeExceeded    QUEUE_RESULT = 12
 )
 
 // --- DIAL_STATUS Enum (ID'li) ---
@@ -482,11 +515,13 @@ var SIP_HEADERS = map[string]SIPHeader{
 type CALL_TERMINATION_REASON string
 
 const (
-	CALL_TERMINATION_REASON_ClientHangup      CALL_TERMINATION_REASON = "CLIENT_HANGUP"
-	CALL_TERMINATION_REASON_AgentHangup       CALL_TERMINATION_REASON = "AGENT_HANGUP"
-	CALL_TERMINATION_REASON_DialPlanHangup    CALL_TERMINATION_REASON = "DIAL_PLAN_HANGUP"
-	CALL_TERMINATION_REASON_DeadChannel       CALL_TERMINATION_REASON = "DEAD_CHANNEL"
-	CALL_TERMINATION_REASON_MaxAttemptReached CALL_TERMINATION_REASON = "MAX_ATTEMPT_REACHED"
+	CALL_TERMINATION_REASON_ClientHangup         CALL_TERMINATION_REASON = "CLIENT_HANGUP"
+	CALL_TERMINATION_REASON_AgentHangup          CALL_TERMINATION_REASON = "AGENT_HANGUP"
+	CALL_TERMINATION_REASON_DialPlanHangup       CALL_TERMINATION_REASON = "DIAL_PLAN_HANGUP"
+	CALL_TERMINATION_REASON_DeadChannel          CALL_TERMINATION_REASON = "DEAD_CHANNEL"
+	CALL_TERMINATION_REASON_MaxAttemptReached    CALL_TERMINATION_REASON = "MAX_ATTEMPT_REACHED"
+	CALL_TERMINATION_REASON_Abandon              CALL_TERMINATION_REASON = "ABANDON"
+	CALL_TERMINATION_REASON_QueueWaitTimeReached CALL_TERMINATION_REASON = "QUEUE_WAIT_TIME_REACHED"
 )
 
 type CallDistributionAttempt struct {
@@ -498,4 +533,35 @@ type CallDistributionAttempt struct {
 	UserID        int64       // Long -> int64
 	AttemptNumber int64       // Long -> int64
 	DialStatus    DIAL_STATUS // DIAL_STATUS enum -> constants.DIAL_STATUS
+}
+
+const (
+	ResultUnknownError           = 1
+	ResultClientHangup           = 2
+	ResultAgentHangup            = 3
+	ResultAidEngineReject        = 4
+	ResultAidEngineError         = 5
+	ResultTimeout                = 6
+	ResultActionAnnounceRedirect = 7
+	ResultAbandon                = 8
+	ResultQeRestart              = 9
+	ResultMediaServerDisabled    = 10
+	ResultMaxRejectLimit         = 11
+	ResultMaxWaitTimeExceeded    = 12
+)
+
+// String -> Int Dönüşüm Haritası
+var queueResultMap = map[string]int{
+	"UNKNOWN_ERROR":            ResultUnknownError,
+	"CLIENT_HANGUP":            ResultClientHangup,
+	"AGENT_HANGUP":             ResultAgentHangup,
+	"AID_ENGINE_REJECT":        ResultAidEngineReject,
+	"AID_ENGINE_ERROR":         ResultAidEngineError,
+	"TIMEOUT":                  ResultTimeout,
+	"ACTION_ANNOUNCE_REDIRECT": ResultActionAnnounceRedirect,
+	"ABANDON":                  ResultAbandon,
+	"QE_RESTART":               ResultQeRestart,
+	"MEDIA_SERVER_DISABLED":    ResultMediaServerDisabled,
+	"MAX_REJECT_LIMIT":         ResultMaxRejectLimit,
+	"MAX_WAIT_TIME_EXCEEDED":   ResultMaxWaitTimeExceeded,
 }

@@ -25,7 +25,7 @@
     "DBConnectingString": "server=GAVWSQLTST01.global-bilgi.entp;database=gbWebPhone_test;integrated security=true",
     "ari_connections": [
         {
-            "Id": "1",
+            "Id": 2,
             "Username": "ari4java",
             "Password": "yothere",
             "RestUrl": "http://10.12.135.33:8088/ari",

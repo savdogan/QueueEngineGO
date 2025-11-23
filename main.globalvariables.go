@@ -74,7 +74,7 @@ func InitGlobalState(cfg *Config, version int) {
 		db.SetConnMaxLifetime(time.Hour)
 
 		// Bağlantıyı test et (Ping)
-		ctx, cancel := context.WithTimeout(bgCtx, 5*time.Second)
+		ctx, cancel := context.WithTimeout(bgCtx, 10*time.Second)
 		defer cancel()
 		if err := db.PingContext(ctx); err != nil {
 			log.Fatalf("Veritabanına erişilemedi: %v", err)
@@ -193,33 +193,33 @@ func (c *Config) Validate() error {
 	}
 
 	// ARI bağlantılarında duplike ID kontrolü için map (YENİ EKLENDİ)
-	seenAriIDs := make(map[string]bool)
+	seenAriIDs := make(map[int64]bool)
 
 	for i, conn := range c.AriConnections {
 		// ID Boşluk Kontrolü
-		if conn.Id == "" {
+		if conn.Id == 0 {
 			return fmt.Errorf("ari_connections[%d]: 'Id' alanı eksik", i)
 		}
 
 		// ID Duplike Kontrolü (YENİ EKLENDİ)
 		if seenAriIDs[conn.Id] {
-			return fmt.Errorf("konfigürasyon hatası: 'ari_connections' içinde mükerrer ID tespit edildi -> %s", conn.Id)
+			return fmt.Errorf("konfigürasyon hatası: 'ari_connections' içinde mükerrer ID tespit edildi -> %d", conn.Id)
 		}
 		seenAriIDs[conn.Id] = true
 
 		// Kullanıcı Adı
 		if conn.Username == "" {
-			return fmt.Errorf("ari_connections[%d] (ID: %s): 'Username' eksik", i, conn.Id)
+			return fmt.Errorf("ari_connections[%d] (ID: %d): 'Username' eksik", i, conn.Id)
 		}
 
 		// URL Validasyonları (RestUrl)
 		if _, err := url.ParseRequestURI(conn.RestURL); err != nil {
-			return fmt.Errorf("ari_connections[%d] (ID: %s): Geçersiz 'RestUrl' -> %s", i, conn.Id, conn.RestURL)
+			return fmt.Errorf("ari_connections[%d] (ID: %d): Geçersiz 'RestUrl' -> %s", i, conn.Id, conn.RestURL)
 		}
 
 		// URL Validasyonları (WebsocketURL)
 		if _, err := url.ParseRequestURI(conn.WebsocketURL); err != nil {
-			return fmt.Errorf("ari_connections[%d] (ID: %s): Geçersiz 'WebsocketURL' -> %s", i, conn.Id, conn.WebsocketURL)
+			return fmt.Errorf("ari_connections[%d] (ID: %d): Geçersiz 'WebsocketURL' -> %s", i, conn.Id, conn.WebsocketURL)
 		}
 	}
 

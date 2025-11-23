@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/CyCoreSystems/ari/v6"
 )
@@ -13,18 +14,19 @@ import (
 type Call struct {
 	sync.RWMutex `json:"-"` // Call yapısının eşzamanlı erişimi için kilit
 	// --- Veri Alanları (Sayısal, String ve Listeler) ---
-	InstanceID              string  `json:"instanceId,omitempty"`
-	ConnectionName          string  `json:"connectionId,omitempty"`
-	OutBoundApplicationName string  `json:"outboundApplicationName,omitempty"`
-	UniqueId                string  `json:"uniqueId"`
-	ParentId                string  `json:"parentId,omitempty"`
-	ExternalId              string  `json:"externalId,omitempty"`
-	ServerId                int64   `json:"serverId"`
-	QueueName               string  `json:"queueName"`
-	Priority                int     `json:"priority"`
-	PreferredAgent          string  `json:"preferredAgent,omitempty"`
-	LastDtmf                string  `json:"lastDtmf,omitempty"`
-	Skills                  []int64 `json:"skills,omitempty"`
+	InstanceID              string       `json:"instanceId,omitempty"`
+	ConnectionName          string       `json:"connectionId,omitempty"`
+	OutBoundApplicationName string       `json:"outboundApplicationName,omitempty"`
+	UniqueId                string       `json:"uniqueId"`
+	ParentId                string       `json:"parentId,omitempty"`
+	ExternalId              string       `json:"externalId,omitempty"`
+	ServerId                int64        `json:"serverId"`
+	QueueName               string       `json:"queueName"`
+	Priority                int          `json:"priority"`
+	PreferredAgent          string       `json:"preferredAgent,omitempty"`
+	LastDtmf                string       `json:"lastDtmf,omitempty"`
+	Skills                  []int64      `json:"skills,omitempty"`
+	QeueuLog                *WbpQueueLog `json:"-"`
 
 	// --- Types -> Constant Tipleri ---
 	State               CALL_STATE              `json:"state"`
@@ -57,6 +59,8 @@ type Call struct {
 	// --- Eşzamanlılık Alanları (JSON'dan hariç tutulur) ---
 	lock                      sync.Mutex `json:"-"`
 	DistributionAttemptNumber int64      `json:"distributionAttemptNumber,omitempty"`
+	AttempStartTime           time.Time  `json:"attempStartTime"`
+	AttempEndTime             time.Time  `json:"attempEndTime"`
 	FailedPingAttempts        int        `json:"-"`
 
 	ChannelKey               *ari.Key `json:"channelKey,omitempty"`
@@ -145,12 +149,15 @@ func (c *Call) GetFailedPingAttempts() int {
 	return c.FailedPingAttempts
 }
 
+func (c *Call) SetTerminationReason(terminationReason CALL_TERMINATION_REASON) {
+	c.TerminationReason = terminationReason
+	c.QueueResult = GetQueueResultFromTerminationResult(terminationReason)
+}
+
 func InstantiateCall(message *ari.StasisStart, uniqueId string, channel string, callSetup CallSetup, serverId int64) *Call {
 	call := &Call{}
 
 	call.State = CALL_STATE_New
-
-	call.QueueName = callSetup.QueueName
 
 	call.UniqueId = uniqueId
 	call.ServerId = serverId
@@ -223,6 +230,8 @@ func InstantiateCall(message *ari.StasisStart, uniqueId string, channel string, 
 	call.Application = message.Application
 
 	call.CurrentCallScheduleAction = CALL_SCHEDULED_ACTION_Empty
+
+	call.QueueName = callSetup.QueueName
 
 	return call
 

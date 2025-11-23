@@ -91,19 +91,21 @@ func InitAriConnection() {
 
 			// 2. App Bilgilerini Oluştur (Struct Literal kullanarak daha okunaklı hale getirildi)
 			inboundInfo := AriAppInfo{
-				ConnectionName:        fmt.Sprintf("%s-%s-%s", ariCfg.Id, appInbound, instanceId),
+				ConnectionName:        fmt.Sprintf("%d-%s-%s", ariCfg.Id, appInbound, instanceId),
 				InboundAppName:        appInbound,
 				OutboundAppName:       appOutbound,
 				IsOutboundApplication: false,
 				InstanceID:            instanceId,
+				MediaServerId:         ariCfg.Id,
 			}
 
 			outboundInfo := AriAppInfo{
-				ConnectionName:        fmt.Sprintf("%s-%s-%s", ariCfg.Id, appOutbound, instanceId),
+				ConnectionName:        fmt.Sprintf("%d-%s-%s", ariCfg.Id, appOutbound, instanceId),
 				InboundAppName:        appInbound,
 				OutboundAppName:       appOutbound,
 				IsOutboundApplication: true,
 				InstanceID:            instanceId,
+				MediaServerId:         ariCfg.Id,
 			}
 
 			// 3. Uygulamaları Başlat (Tekrarlayan kod Helper fonksiyona taşındı)
@@ -193,7 +195,7 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 		go handleDialMessage(msg.(*ari.Dial))
 
 	case *ari.ChannelVarset:
-		clog(LevelTrace, "[%s] ChannelVarset: Channel %s, Var: %s, Value: %s", appName, channelID, v.Variable, v.Value)
+		clog(LevelDebug, "[%s] ChannelVarset: Channel %s, Var: %s, Value: %s", appName, channelID, v.Variable, v.Value)
 
 	case *ari.ChannelStateChange:
 		clog(LevelDebug, "[%s] ChannelStateChange: Channel %s is now %s", appName, v.Channel.ID, v.Channel.State)
