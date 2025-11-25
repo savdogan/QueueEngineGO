@@ -1,0 +1,149 @@
+/*package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/hudl/fargo"
+)
+
+type EurekaService struct {
+	sync.RWMutex `json:"-"`
+	client       fargo.EurekaConnection // DİKKAT: * değil
+	instance     *fargo.Instance
+	cancel       context.CancelFunc
+}
+
+func startEurekaClient() {
+	instance := &fargo.Instance{
+		InstanceId:  "QE-ENGINE-GO",
+		HostName:    g.Cfg.getHostname(),
+		App:         "GO-APP",
+		IPAddr:      "127.0.0.1",
+		VipAddress:  "go-app",
+		Port:        g.Cfg.getPort(),
+		PortEnabled: true,
+		Status:      fargo.UP,
+		DataCenterInfo: fargo.DataCenterInfo{
+			Name: fargo.MyOwn,
+		},
+		LeaseInfo: fargo.LeaseInfo{
+			RenewalIntervalInSecs: 30,
+			DurationInSecs:        90,
+		},
+	}
+
+	eurekaService := NewEurekaService(
+		"http://10.12.135.21:8761/eureka/",
+		instance,
+	)
+
+	// Register
+	if err := eurekaService.Register(); err != nil {
+		log.Fatal("Register failed:", err)
+	}
+
+	// Heartbeat başlat
+	eurekaService.StartHeartbeat()
+
+	// Elegant shutdown
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	<-sig
+
+	eurekaService.Deregister()
+}
+
+// Eureka bağlantısını oluştur
+func NewEurekaService(eurekaURL string, instance *fargo.Instance) *EurekaService {
+	client := fargo.NewConn(eurekaURL)
+
+	return &EurekaService{
+		client:   client,
+		instance: instance,
+	}
+}
+
+// Register işlemi
+func (es *EurekaService) Register() error {
+	log.Println("[Eureka] Registering service:", es.instance.App)
+
+	err := es.client.RegisterInstance(es.instance)
+	if err != nil {
+		return err
+	}
+
+	log.Println("[Eureka] Registered successfully")
+	return nil
+}
+
+// Heartbeat döngüsü
+func (es *EurekaService) StartHeartbeat() {
+	ctx, cancel := context.WithCancel(context.Background())
+	es.cancel = cancel
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				err := es.client.HeartBeatInstance(es.instance)
+				if err != nil {
+					log.Println("[Eureka] Heartbeat error:", err)
+				} else {
+					log.Println("[Eureka] Heartbeat OK")
+				}
+
+			case <-ctx.Done():
+				log.Println("[Eureka] Heartbeat loop stopped")
+				return
+			}
+		}
+	}()
+}
+
+// Deregister işlemi
+func (es *EurekaService) Deregister() error {
+	log.Println("[Eureka] Deregistering service:", es.instance.InstanceId)
+
+	if es.cancel != nil {
+		es.cancel()
+	}
+
+	err := es.client.DeregisterInstance(es.instance)
+	if err != nil {
+		return err
+	}
+
+	log.Println("[Eureka] Deregistered successfully")
+	return nil
+}
+
+// Eureka'dan uygulama bilgisi alma
+func (es *EurekaService) GetApp(appName string) (*fargo.Application, error) {
+	return es.client.GetApp(appName)
+}
+
+func (es *EurekaService) GetApps() ([]*fargo.Application, error) {
+	appMap, err := es.client.GetApps()
+	if err != nil {
+		return nil, err
+	}
+
+	// map → slice dönüşümü
+	apps := make([]*fargo.Application, 0, len(appMap))
+	for _, app := range appMap {
+		apps = append(apps, app)
+	}
+
+	return apps, nil
+}
+
+*/

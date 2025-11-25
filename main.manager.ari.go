@@ -13,21 +13,37 @@ import (
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		clients: make(map[string]ari.Client),
+		clients: make(map[string]WrapedAriClient),
 	}
 }
 
-func (cm *ClientManager) AddClient(connectiondId string, cl ari.Client) {
+func (cm *ClientManager) AddClient(connectiondId string, cancelFunc context.CancelFunc, cl ari.Client) {
 	cm.Lock()
 	defer cm.Unlock()
-	cm.clients[connectiondId] = cl
+	cm.clients[connectiondId] = WrapedAriClient{
+		client:     &cl,
+		cancelFunc: cancelFunc,
+	}
 }
 
 func (cm *ClientManager) GetClient(connectiondId string) (ari.Client, bool) {
 	cm.RLock()
 	defer cm.RUnlock()
 	cl, ok := cm.clients[connectiondId]
-	return cl, ok
+	return *cl.client, ok
+}
+
+func (cm *ClientManager) GetWrapedAriClient(connectiondId string) (WrapedAriClient, bool) {
+	cm.RLock()
+	defer cm.RUnlock()
+	wal, ok := cm.clients[connectiondId]
+	return wal, ok
+}
+
+func (cm *ClientManager) RemoveClient(connectiondId string) {
+	cm.Lock()
+	defer cm.Unlock()
+	delete(cm.clients, connectiondId)
 }
 
 // runApp, tek bir ARI bağlantısını kurar ve olayları dinler.
@@ -68,12 +84,13 @@ func runApp(ctx context.Context, cfg *AriConfig, manager *ClientManager, ariAppI
 		return err
 	}
 
+	customExitCtx, cancelCustom := context.WithCancel(context.Background())
 	// İstemciyi Yöneticiye Kaydet
-	manager.AddClient(ariAppInfo.ConnectionName, cl)
+	manager.AddClient(ariAppInfo.ConnectionName, cancelCustom, cl)
 	clog(LevelInfo, "Client registered and listening: %s", ariAppInfo.ConnectionName)
 
 	// Olay dinlemesini başlat (bloklamaz)
-	go listenApp(ctx, cl, ariAppInfo)
+	go listenApp(ctx, customExitCtx, cl, ariAppInfo)
 
 	return nil
 }
@@ -82,48 +99,141 @@ func InitAriConnection() {
 
 	clog(LevelInfo, "Ari connections are starting...")
 
-	for _, ariCfg := range g.Cfg.AriConnections {
+	for _, server := range g.ServerManager.MediaServers {
 		for _, instanceId := range g.Cfg.InstanceIDs {
-
-			// 1. Ortak İsimlendirmeleri Hazırla
-			appInbound := fmt.Sprintf("%s%s", INBOUND_ARI_APPLICATION_PREFIX, instanceId)
-			appOutbound := fmt.Sprintf("%s%s", OUTBOUND_ARI_APPLICATION_PREFIX, instanceId)
-
-			// 2. App Bilgilerini Oluştur (Struct Literal kullanarak daha okunaklı hale getirildi)
-			inboundInfo := AriAppInfo{
-				ConnectionName:        fmt.Sprintf("%d-%s-%s", ariCfg.Id, appInbound, instanceId),
-				InboundAppName:        appInbound,
-				OutboundAppName:       appOutbound,
-				IsOutboundApplication: false,
-				InstanceID:            instanceId,
-				MediaServerId:         ariCfg.Id,
-			}
-
-			outboundInfo := AriAppInfo{
-				ConnectionName:        fmt.Sprintf("%d-%s-%s", ariCfg.Id, appOutbound, instanceId),
-				InboundAppName:        appInbound,
-				OutboundAppName:       appOutbound,
-				IsOutboundApplication: true,
-				InstanceID:            instanceId,
-				MediaServerId:         ariCfg.Id,
-			}
-
-			// 3. Uygulamaları Başlat (Tekrarlayan kod Helper fonksiyona taşındı)
-			startAriApp(g.Ctx, ariCfg, inboundInfo)
-			startAriApp(g.Ctx, ariCfg, outboundInfo)
+			server.InitAriMediaServer(instanceId)
 		}
 	}
 }
 
+func (asm *WbpServer) InitAriMediaServer(instanceId string) {
+
+	ariCfg := &AriConfig{
+		Id:           asm.ID,
+		WebsocketURL: fmt.Sprintf("ws://%s:8088/ari/events", asm.IP),
+		Username:     *asm.AriUsername,
+		RestURL:      fmt.Sprintf("%sari", *asm.AriURL),
+		Password:     *asm.AriPassword,
+	}
+
+	appInbound := fmt.Sprintf("%s%s", INBOUND_ARI_APPLICATION_PREFIX, instanceId)
+	appOutbound := fmt.Sprintf("%s%s", OUTBOUND_ARI_APPLICATION_PREFIX, instanceId)
+
+	// 2. App Bilgilerini Oluştur (Struct Literal kullanarak daha okunaklı hale getirildi)
+	inboundInfo := AriAppInfo{
+		ConnectionName:        fmt.Sprintf("%d-%s-%s", asm.ID, appInbound, instanceId),
+		InboundAppName:        appInbound,
+		OutboundAppName:       appOutbound,
+		IsOutboundApplication: false,
+		InstanceID:            instanceId,
+		MediaServerId:         asm.ID,
+	}
+
+	outboundInfo := AriAppInfo{
+		ConnectionName:        fmt.Sprintf("%d-%s-%s", asm.ID, appOutbound, instanceId),
+		InboundAppName:        appInbound,
+		OutboundAppName:       appOutbound,
+		IsOutboundApplication: true,
+		InstanceID:            instanceId,
+		MediaServerId:         asm.ID,
+	}
+
+	// 3. Uygulamaları Başlat (Tekrarlayan kod Helper fonksiyona taşındı)
+	startAriApp(g.Ctx, *ariCfg, inboundInfo)
+	startAriApp(g.Ctx, *ariCfg, outboundInfo)
+
+}
+
 // startAriApp: Goroutine başlatma mantığını ve hata loglamayı tek bir yerde toplar.
-func startAriApp(ctx context.Context, cfg AriConfig, info AriAppInfo) {
+func startAriApp(ctx context.Context, aricfg AriConfig, info AriAppInfo) {
 	go func() {
 		// runApp fonksiyonuna g.ACM'i buradan parametre olarak geçiyoruz
-		if err := runApp(ctx, &cfg, g.ACM, info); err != nil {
+		if err := runApp(ctx, &aricfg, g.ACM, info); err != nil {
 			clog(LevelError, "ARI application failed to start for Connection: %s, Instance: %s. Error: %v",
 				info.ConnectionName, info.InstanceID, err)
 		}
 	}()
+}
+
+func (sm *ServerManager) addServer(serverId int64) error {
+
+	_, found := g.ServerManager.MediaServers[serverId]
+
+	newServer, err := getServer(g.DB, serverId)
+
+	if err != nil {
+		clog(LevelError, "Server not loaded, Server adding could not complete or server not enabled. Error : %+v", err)
+		return err
+	}
+
+	if found {
+		//find ari client
+		for _, instanceId := range g.Cfg.InstanceIDs {
+
+			appInbound := fmt.Sprintf("%s%s", INBOUND_ARI_APPLICATION_PREFIX, instanceId)
+			appOutbound := fmt.Sprintf("%s%s", OUTBOUND_ARI_APPLICATION_PREFIX, instanceId)
+			connectionNameInbound := fmt.Sprintf("%d-%s-%s", newServer.ID, appInbound, instanceId)
+			connectionNameOutbound := fmt.Sprintf("%d-%s-%s", newServer.ID, appOutbound, instanceId)
+
+			wali, foundi := g.ACM.GetWrapedAriClient(connectionNameInbound)
+			if foundi {
+				wali.cancelFunc()
+				g.ACM.RemoveClient(connectionNameInbound)
+			}
+
+			walo, foundo := g.ACM.GetWrapedAriClient(connectionNameOutbound)
+			if foundo {
+				walo.cancelFunc()
+				g.ACM.RemoveClient(connectionNameOutbound)
+			}
+		}
+
+	} else {
+		g.ServerManager.AddMediaServer(newServer)
+	}
+
+	for _, instanceId := range g.Cfg.InstanceIDs {
+		newServer.InitAriMediaServer(instanceId)
+	}
+
+	return nil
+
+}
+
+func (sm *ServerManager) deleteServer(serverId int64) error {
+
+	_, found := g.ServerManager.MediaServers[serverId]
+
+	if found {
+		//find ari client
+		for _, instanceId := range g.Cfg.InstanceIDs {
+
+			appInbound := fmt.Sprintf("%s%s", INBOUND_ARI_APPLICATION_PREFIX, instanceId)
+			appOutbound := fmt.Sprintf("%s%s", OUTBOUND_ARI_APPLICATION_PREFIX, instanceId)
+			connectionNameInbound := fmt.Sprintf("%d-%s-%s", serverId, appInbound, instanceId)
+			connectionNameOutbound := fmt.Sprintf("%d-%s-%s", serverId, appOutbound, instanceId)
+
+			wali, foundi := g.ACM.GetWrapedAriClient(connectionNameInbound)
+			if foundi {
+				wali.cancelFunc()
+				g.ACM.RemoveClient(connectionNameInbound)
+				clog(LevelDebug, "Ari client is stopped and deleted in server : %d , ari client connection name : %s", serverId, connectionNameInbound)
+			}
+
+			walo, foundo := g.ACM.GetWrapedAriClient(connectionNameOutbound)
+			if foundo {
+				walo.cancelFunc()
+				g.ACM.RemoveClient(connectionNameOutbound)
+				clog(LevelDebug, "Ari client is stopped and deleted in server : %d , ari client connection name : %s", serverId, connectionNameOutbound)
+			}
+		}
+
+	} else {
+		clog(LevelDebug, "Server that will be deleted is not found in cache , server id : %d", serverId)
+	}
+
+	return nil
+
 }
 
 func DebugARIInfo(url, user, pass string) {
@@ -208,8 +318,8 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 	}
 }
 
-// listenApp, tüm ARI olaylarını dinleyen sonsuz döngüyü çalıştırır.
-func listenApp(ctx context.Context, cl ari.Client, ariAppInfo AriAppInfo) {
+// listenApp fonksiyonuna yeni bir 'customExitCtx' parametresi ekledik
+func listenApp(ctx context.Context, customExitCtx context.Context, cl ari.Client, ariAppInfo AriAppInfo) {
 
 	clog(LevelInfo, "Listen App %s , connectionId : %s", cl.ApplicationName(), ariAppInfo.ConnectionName)
 
@@ -217,19 +327,24 @@ func listenApp(ctx context.Context, cl ari.Client, ariAppInfo AriAppInfo) {
 	defer allEvents.Cancel()
 
 	for {
-
 		select {
+		// 1. ARI Eventleri
 		case e := <-allEvents.Events():
 			if e == nil {
 				clog(LevelTrace, "Event boş")
 				continue
 			}
-
-			// Her olayı ayrı bir goroutine'de işle
 			go handleAriEvent(e, cl, ariAppInfo)
 
+		// 2. Uygulama Kapanışı (Genel Shutdown)
 		case <-ctx.Done():
-			clog(LevelInfo, "Listener shutting down...")
+			clog(LevelInfo, "Listener shutting down (App Context)...")
+			return
+
+		// 3. YENİ EKLENEN: Özel Olay Çıkışı
+		case <-customExitCtx.Done():
+			clog(LevelInfo, "Listener shutting down (WebPhone event fired about the server)...")
+			// Gerekirse burada temizlik işlemleri yapılabilir
 			return
 		}
 	}

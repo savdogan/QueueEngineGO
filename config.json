@@ -1,16 +1,5 @@
 {
     "Environment": "Development",
-    "RedisAddresses": [
-        "10.12.135.27:7001",
-        "10.12.135.28:7001",
-        "10.12.135.29:7001",
-        "10.12.135.27:7002",
-        "10.12.135.28:7002",
-        "10.12.135.29:7002",
-        "10.12.135.27:7003",
-        "10.12.135.28:7003",
-        "10.12.135.29:7003"
-    ],
     "InstanceIDs": [
         "10"
     ],
@@ -23,13 +12,5 @@
     "Version": 20,
     "HttpPort": 9091,
     "DBConnectingString": "server=GAVWSQLTST01.global-bilgi.entp;database=gbWebPhone_test;integrated security=true",
-    "ari_connections": [
-        {
-            "Id": 2,
-            "Username": "ari4java",
-            "Password": "yothere",
-            "RestUrl": "http://10.12.135.33:8088/ari",
-            "WebsocketURL": "ws://10.12.135.33:8088/ari/events"
-        }
-    ]
+    "AppName": "QUEUE-ENGINE-GO"
 }

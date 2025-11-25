@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,15 +14,16 @@ import (
 var cfgMinLogLevel LogLevel
 
 type GlobalState struct {
-	DB    *sql.DB
-	QCM   *QueueCacheManager
-	ACM   *ClientManager
-	CM    *CallManager
-	SM    *ScheduleManager
-	RPubs *redis.ClusterClient
-	RSubs *redis.ClusterClient
-	Ctx   context.Context
-	Cfg   *Config
+	DB            *sql.DB
+	QCM           *QueueCacheManager
+	ACM           *ClientManager
+	CM            *CallManager
+	SM            *ScheduleManager
+	RPubs         *redis.ClusterClient
+	RSubs         *redis.ClusterClient
+	Ctx           context.Context
+	Cfg           *Config
+	ServerManager *ServerManager
 }
 
 var (
@@ -80,13 +79,38 @@ func InitGlobalState(cfg *Config, version int) {
 			log.Fatalf("Veritabanına erişilemedi: %v", err)
 		}
 
+		configMap, err := getAppConfigsAsMap(db)
+		if err != nil {
+			log.Fatalf("QEConfig could not loaded from database : %v", err)
+		}
+		cfg.QEAppConfig = configMap
+
+		serverManager := NewServerManager()
+
+		mediaServers, err := getAllServersWithType(db, 1)
+		if err != nil {
+			log.Fatalf("Media servers could not loaded : %v", err)
+		}
+		serverManager.MediaServers = mediaServers
+
+		// 7. ARI Connections (Asterisk) Kontrolü
+		if len(serverManager.MediaServers) == 0 {
+			log.Fatalf("There are no media server definition")
+		}
+
+		registrarServers, err := getAllServersWithType(db, 2)
+		if err != nil {
+			log.Fatalf("Media servers could not loaded : %v", err)
+		}
+		serverManager.RegistrarServers = registrarServers
+
 		// 3. Redis Bağlantıları (Pub ve Sub için ayrı)
 		log.Println("Redis Cluster bağlantıları kuruluyor...")
 
 		// Publisher Client
 		rPubs := redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:    cfg.RedisAddresses,
-			Password: cfg.RedisPassword,
+			Addrs:    cfg.getRedisServers(),
+			Password: cfg.getConfigValue("redis.password", true),
 			// Diğer timeout ayarları buraya eklenebilir
 		})
 		if err := rPubs.Ping(ctx).Err(); err != nil {
@@ -95,8 +119,8 @@ func InitGlobalState(cfg *Config, version int) {
 
 		// Subscriber Client (Ayrı olması şarttır)
 		rSubs := redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:    cfg.RedisAddresses,
-			Password: cfg.RedisPassword,
+			Addrs:    cfg.getRedisServers(),
+			Password: cfg.getConfigValue("redis.password", true),
 		})
 		if err := rSubs.Ping(ctx).Err(); err != nil {
 			log.Fatalf("Redis Subs bağlantı hatası: %v", err)
@@ -121,15 +145,16 @@ func InitGlobalState(cfg *Config, version int) {
 
 		// 5. Global Değişkene Atama
 		g = &GlobalState{
-			DB:    db,
-			QCM:   qcm,
-			ACM:   acm,
-			CM:    cm,
-			SM:    sm,
-			RPubs: rPubs,
-			RSubs: rSubs,
-			Ctx:   bgCtx,
-			Cfg:   cfg,
+			DB:            db,
+			QCM:           qcm,
+			ACM:           acm,
+			CM:            cm,
+			SM:            sm,
+			RPubs:         rPubs,
+			RSubs:         rSubs,
+			Ctx:           bgCtx,
+			Cfg:           cfg,
+			ServerManager: serverManager,
 		}
 	})
 }
@@ -139,16 +164,6 @@ func (c *Config) Validate() error {
 	// 1. Environment Kontrolü
 	if c.Environment == "" {
 		return fmt.Errorf("konfigürasyon hatası: 'Environment' boş olamaz")
-	}
-
-	// 2. Redis Adresleri Kontrolü
-	if len(c.RedisAddresses) == 0 {
-		return fmt.Errorf("konfigürasyon hatası: 'RedisAddresses' listesi boş, en az bir node gerekli")
-	}
-	for _, addr := range c.RedisAddresses {
-		if !strings.Contains(addr, ":") {
-			return fmt.Errorf("konfigürasyon hatası: Redis adresi hatalı formatta (%s). Örn: 127.0.0.1:6379", addr)
-		}
 	}
 
 	// 3. InstanceIDs Kontrolü (YENİ EKLENDİ)
@@ -185,42 +200,6 @@ func (c *Config) Validate() error {
 	// 6. Log Dizini
 	if c.LogDirectory == "" {
 		return fmt.Errorf("konfigürasyon hatası: 'LogDirectory' belirtilmemiş")
-	}
-
-	// 7. ARI Connections (Asterisk) Kontrolü
-	if len(c.AriConnections) == 0 {
-		return fmt.Errorf("uyarı: Hiçbir 'ari_connections' tanımlanmamış. Çağrı yönetimi çalışmayabilir")
-	}
-
-	// ARI bağlantılarında duplike ID kontrolü için map (YENİ EKLENDİ)
-	seenAriIDs := make(map[int64]bool)
-
-	for i, conn := range c.AriConnections {
-		// ID Boşluk Kontrolü
-		if conn.Id == 0 {
-			return fmt.Errorf("ari_connections[%d]: 'Id' alanı eksik", i)
-		}
-
-		// ID Duplike Kontrolü (YENİ EKLENDİ)
-		if seenAriIDs[conn.Id] {
-			return fmt.Errorf("konfigürasyon hatası: 'ari_connections' içinde mükerrer ID tespit edildi -> %d", conn.Id)
-		}
-		seenAriIDs[conn.Id] = true
-
-		// Kullanıcı Adı
-		if conn.Username == "" {
-			return fmt.Errorf("ari_connections[%d] (ID: %d): 'Username' eksik", i, conn.Id)
-		}
-
-		// URL Validasyonları (RestUrl)
-		if _, err := url.ParseRequestURI(conn.RestURL); err != nil {
-			return fmt.Errorf("ari_connections[%d] (ID: %d): Geçersiz 'RestUrl' -> %s", i, conn.Id, conn.RestURL)
-		}
-
-		// URL Validasyonları (WebsocketURL)
-		if _, err := url.ParseRequestURI(conn.WebsocketURL); err != nil {
-			return fmt.Errorf("ari_connections[%d] (ID: %d): Geçersiz 'WebsocketURL' -> %s", i, conn.Id, conn.WebsocketURL)
-		}
 	}
 
 	return nil

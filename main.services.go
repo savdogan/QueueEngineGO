@@ -44,6 +44,12 @@ func startHttpEnabled() {
 			w.Write([]byte("Call initiated on " + appName + " with ID: " + h.ID()))
 		}))
 
+		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			// Eureka sunucusu buraya istek attığında 200 OK dönmelisiniz.
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"UP"}`))
+		})
+
 		// 🔹 HTTP üzerinden event alma (/event)
 		http.HandleFunc("/event", func(w http.ResponseWriter, r *http.Request) {
 			var e HttpEvent

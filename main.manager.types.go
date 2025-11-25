@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"sync"
 
@@ -10,7 +11,12 @@ import (
 // ClientManager, tüm aktif ARI istemcilerini yönetir.
 type ClientManager struct {
 	sync.RWMutex
-	clients map[string]ari.Client
+	clients map[string]WrapedAriClient
+}
+
+type WrapedAriClient struct {
+	client     *ari.Client
+	cancelFunc context.CancelFunc
 }
 
 // DBManager, tüm uygulama için tek bir SQL Server bağlantısını yönetir.

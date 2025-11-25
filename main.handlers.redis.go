@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"strings"
 )
 
@@ -96,6 +97,8 @@ func startRedisListener() {
 		channels = append(channels, REDIS_DISTIRIBITION_CHANNEL_PREFIX+instanceId)
 	}
 
+	channels = append(channels, REDIS_GBWEBPHONE_CHANNEL)
+
 	pubsub := g.RSubs.Subscribe(g.Ctx, channels...)
 
 	go func() {
@@ -117,10 +120,82 @@ func startRedisListener() {
 				// Kanal tipine göre mesaj işleme mantığı
 				switch msg.Channel {
 
+				case REDIS_GBWEBPHONE_CHANNEL:
+					go handleWebphoneMessage(msg.Payload)
 				default:
 					clog(LevelError, "[REDIS] Bilinmeyen kanaldan mesaj alındı: %s", msg.Channel)
 				}
 			}
 		}
 	}()
+}
+
+func handleWebphoneMessage(payload string) {
+	// Go'da tip kontrolleri için switch-case daha yaygın ve okunaklıdır
+
+	message := &WebphoneEntityMessage{}
+
+	err := json.Unmarshal([]byte(payload), message)
+	if err != nil {
+		log.Printf("Could not handle WebphoneEntityMessage entity message: %v", err)
+		return
+	}
+
+	switch message.EntityType {
+	case EntityServer:
+		go handleServerEntityMessage(message)
+	case EntityQueue:
+		go handleQueueEntityMessage(message)
+	default:
+		// Opsiyonel: Beklenmeyen bir tür gelirse burası çalışır.
+		// fmt.Printf("Bilinmeyen EntityType: %s\n", message.EntityType)
+	}
+}
+
+func handleServerEntityMessage(message *WebphoneEntityMessage) {
+	var server WbpServer
+
+	// 1. JSON Parse İşlemi (Gson.fromJson karşılığı)
+	// message.SerializableObject []byte olduğu için direkt Unmarshal edilebilir.
+	err := json.Unmarshal(message.SerializableObject, &server)
+	if err != nil {
+		log.Printf("Could not handle server entity message: %v", err)
+		return
+	}
+
+	// 2. Action Type Kontrolü
+	switch message.Type {
+	case ActionAdd, ActionEdit:
+		g.ServerManager.addServer(server.ID)
+		// ariConnectionManager.OnCreateServer(server.ID)
+		log.Printf("Server is creating/recreating: %d", server.ID)
+	case ActionDelete:
+		log.Printf("Server is deleting: %d", server.ID)
+		g.ServerManager.deleteServer(server.ID)
+	default:
+		log.Printf("Bilinmeyen Server Action: %s", message.Type)
+	}
+}
+
+func handleQueueEntityMessage(message *WebphoneEntityMessage) {
+	var queue Queue
+
+	// 1. JSON Parse İşlemi
+	err := json.Unmarshal(message.SerializableObject, &queue)
+	if err != nil {
+		log.Printf("Could not handle queue entity message: %v", err)
+		return
+	}
+
+	// 2. Action Type Kontrolü
+	switch message.Type {
+	case ActionAdd, ActionEdit:
+		g.QCM.LoadQueue(queue.QueueName)
+		clog(LevelInfo, "Queue qefinition updated: %s", queue.QueueName)
+	case ActionDelete:
+		g.QCM.RemoveQueue(queue.QueueName)
+		clog(LevelInfo, "Queue qefinition deleted: %s", message.Type)
+	default:
+		clog(LevelInfo, "Unknown Queue Action: %s", message.Type)
+	}
 }

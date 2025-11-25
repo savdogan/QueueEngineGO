@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -234,3 +235,78 @@ func loadConfig(path string) *Config {
 
 	return &cfg
 }
+
+// Konfigürasyonları Map formatında döner (Hızlı erişim için ideal)
+// Kullanımı: configMap["MY_SETTING"] -> "100"
+func getAppConfigsAsMap(db *sql.DB) (map[string]string, error) {
+	configs, err := getAllAppConfigs(db)
+	if err != nil {
+		return nil, err
+	}
+
+	configMap := make(map[string]string)
+	for _, c := range configs {
+		configMap[c.PropKey] = c.PropValue
+	}
+
+	return configMap, nil
+}
+
+func (cfg *Config) getRedisServers() []string {
+	cfg.RLock()
+	defer cfg.RUnlock()
+
+	if cfg.QEAppConfig == nil {
+		log.Fatal("QeAppConfig is null in getRedisServers")
+	}
+
+	c := cfg.QEAppConfig["redis.addresses"]
+
+	if c == "" {
+		log.Fatal("redis.addresses is empty")
+	}
+
+	c = strings.ReplaceAll(c, "redis://", "")
+	redisAdressesList := strings.Split(c, ",")
+
+	return redisAdressesList
+}
+
+func (cfg *Config) getConfigValue(key string, logFatalOnNotExists bool) string {
+	cfg.RLock()
+	defer cfg.RUnlock()
+
+	if cfg.QEAppConfig == nil {
+		log.Fatal("QeAppConfig is null in getRedisServers")
+	}
+
+	c := cfg.QEAppConfig[key]
+
+	if c == "" {
+		if logFatalOnNotExists {
+			log.Fatalf("%s is empty", key)
+		} else {
+			log.Printf("%s is empty", key)
+		}
+
+	}
+
+	return c
+}
+
+/*
+func (cfg *Config) getPort() int {
+	cfg.RLock()
+	defer cfg.RUnlock()
+
+	return cfg.HttpPort
+}
+
+func (cfg *Config) getHostname() string {
+	cfg.RLock()
+	defer cfg.RUnlock()
+
+	return cfg.PublisherHostName
+}
+
+*/

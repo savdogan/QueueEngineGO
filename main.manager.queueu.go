@@ -24,21 +24,29 @@ func NewQueueCacheManager(DB *sql.DB) *QueueCacheManager {
 // GetQueueByName, önce önbelleği kontrol eder, yoksa veritabanından çeker (Lazy Loading).
 func (m *QueueCacheManager) GetQueueByName(queueName string) (*Queue, error) {
 
-	//
-	inQueueName := queueName
-
 	// --- 1. Önbellek Kontrolü (Okuma Kilidi) ---
 	m.RLock()
-	queue, ok := m.Cache[inQueueName]
+	queue, ok := m.Cache[queueName]
 	m.RUnlock()
 
 	if ok {
-		clog(LevelDebug, "Kuyruk tanımı önbellekten okundu: %s", inQueueName)
+		clog(LevelDebug, "Kuyruk tanımı önbellekten okundu: %s", queueName)
 		return queue, nil
 	}
 
+	newQueue, err := m.LoadQueue(queueName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return newQueue, nil
+}
+
+// Load Queue Name
+func (m *QueueCacheManager) LoadQueue(queueName string) (*Queue, error) {
 	// --- 2. Veritabanından Çekme ---
-	clog(LevelDebug, "Kuyruk tanımı veritabanından çekiliyor: %s", inQueueName)
+	clog(LevelDebug, "Kuyruk tanımı veritabanından çekiliyor: %s", queueName)
 
 	wbpQueue := &WbpQueue{}
 	query := "SELECT id, queue_name, queue_description, enabled, deleted, create_date, create_user, update_date, update_user, media_archive_period, media_delete_period, tenant_id, target_service_level, target_service_level_threshold, music_class, announce, context, timeout, monitor_format, strategy, service_level, retry, maxlen, monitor_type, report_hold_time, member_delay, member_macro, autofill, weight, leave_when_empty, join_empty, announce_frequency, min_announce_frequency, periodic_announce_frequency, relative_period_announce, announce_hold_time, announce_position, announce_round_seconds, queue_you_are_next, queue_there_are, queue_calls_waiting, queue_hold_time, queue_minutes, queue_seconds, queue_thank_you, queue_less_than, queue_report_hold, periodic_announce, set_interface_var, event_when_called, ring_in_use, timeout_restart, set_queue_var, set_queue_entry_var, event_member_status, short_abandoned_threshold, result_code_timer, result_code_timer_status, type, relax_timer, relax_timer_enabled, result_code_timer_enabled, suspend_transfer_time, music_class_on_hold, wait_timeout, periodic_announce_initial_delay, periodic_announce_max_play_count, client_announce_sound_file, client_announce_min_estimation_time, action_announce_sound_file, action_announce_initial_delay, action_announce_frequency, action_announce_max_play_count, action_announce_wait_time, action_announce_allowed_dtmf, position_announce_initial_delay, min_announced_hold_time, max_announced_hold_time, hold_time_announce_calculation_mode, queue_more_than, report_position, action_announce_wrong_dtmf_handling, migration FROM dbo.wbp_queue WHERE queue_name = @QueueName"
@@ -64,7 +72,7 @@ func (m *QueueCacheManager) GetQueueByName(queueName string) (*Queue, error) {
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("'%s' adında kuyruk bulunamadı", inQueueName)
+		return nil, fmt.Errorf("'%s' adında kuyruk bulunamadı", queueName)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("kuyruk verisi okunurken hata: %w", err)
@@ -74,12 +82,24 @@ func (m *QueueCacheManager) GetQueueByName(queueName string) (*Queue, error) {
 
 	// --- 3. Önbelleğe Yazma (Yazma Kilidi) ---
 	m.Lock()
-	m.Cache[inQueueName] = newQueue
+	m.Cache[queueName] = newQueue
 	m.Unlock()
 
-	clog(LevelDebug, "Kuyruk tanımı veritabanında okunup ön belleğe yüklendi: %s", inQueueName)
+	clog(LevelDebug, "Kuyruk tanımı veritabanında okunup ön belleğe yüklendi: %s", queueName)
 
 	return newQueue, nil
+}
+
+// RemoveQueue, hafızadan kuyruğu siler
+func (m *QueueCacheManager) RemoveQueue(queueName string) error {
+
+	m.Lock()
+	defer m.Unlock()
+
+	delete(m.Cache, queueName)
+
+	return nil
+
 }
 
 // InsertQueueLog, kuyruk logunu veritabanına kaydeder.

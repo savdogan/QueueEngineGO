@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -12,34 +13,61 @@ const AGENT_LEG_CALL_TYPE = "agent_leg"
 const REDIS_DISTIRIBITION_CHANNEL_PREFIX = "channelAidDistribution"
 const REDIS_NEW_INTERACTION_CHANNEL = "channelInteractionForNAID"
 const REDIS_INTERACTION_STATE_CHANNEL = "channelQEInteractionState"
+const REDIS_GBWEBPHONE_CHANNEL = "channelGBWebPhone"
 
 type NewCallInteraction struct {
 	// Ajanın yetkili olduğu grup ID'lerinin listesi
 	Groups []int `json:"groups"`
-
 	// Etkileşimin çalıştığı sunucu örneği/instance ID'si
 	InstanceID string `json:"instanceId"`
-
 	// Etkileşimin benzersiz kimliği (UUID/GUID)
 	InteractionID string `json:"interactionId"`
-
 	// Etkileşimin öncelik seviyesi (örneğin 0-100 arası)
 	InteractionPriority int `json:"interactionPriority"`
-
 	// Etkileşimin yönlendirileceği kuyruk adı
 	InteractionQueue string `json:"interactionQueue"`
-
 	// Etkileşim tipi (örneğin 1: Çağrı, 2: Chat, 3: Email)
 	InteractionType int `json:"interactionType"`
-
 	// Mümkünse etkileşimin atanması istenen belirli bir ajan
 	PreferredAgent string `json:"preferredAgent"`
-
 	// Etkileşimin gerektirdiği yetenek ID'lerinin listesi
 	RequiredSkills []int `json:"requiredSkills"`
-
 	// Olayın zaman damgası (milisaniseler)
 	Timestamp int64 `json:"timestamp"`
+}
+
+type QeAppConfig struct {
+	PropKey   string `json:"prop_key"`
+	PropValue string `json:"prop_value"`
+}
+
+type WebphoneMessageActionType string
+
+const (
+	ActionAdd    WebphoneMessageActionType = "ADD"
+	ActionEdit   WebphoneMessageActionType = "EDIT"
+	ActionDelete WebphoneMessageActionType = "DELETE"
+)
+
+// WEBPHONE_MESSAGE_ENTITY_TYPE karşılığı
+type WebphoneMessageEntityType string
+
+const (
+	EntityQueue  WebphoneMessageEntityType = "QUEUE"
+	EntityServer WebphoneMessageEntityType = "SERVER"
+)
+
+// --- Struct ---
+
+// WebphoneEntityMessage karşılığı
+type WebphoneEntityMessage struct {
+	// JSON tagleri Java'daki değişken isimleriyle (camelCase) eşleştirildi.
+	Type       WebphoneMessageActionType `json:"type"`
+	EntityType WebphoneMessageEntityType `json:"entityType"`
+
+	// JsonObject karşılığı: Veriyi raw byte olarak tutar, sonradan unmarshal edilebilir.
+	// Alternatif olarak map[string]interface{} de kullanılabilir.
+	SerializableObject json.RawMessage `json:"serializableObject"`
 }
 
 // DistributionMessage, yayınlayacağımız mesajın ana yapısıdır
@@ -68,6 +96,27 @@ type AriAppInfo struct {
 	IsOutboundApplication bool   `json:"-"`
 	InstanceID            string `json:"instanceId"`
 	MediaServerId         int64  `json:"mediaServerId"`
+}
+
+type WbpServer struct {
+	ID              int64   `json:"id" db:"id"`
+	IP              string  `json:"ip" db:"ip"`
+	Domain          *string `json:"domain" db:"domain"`         // Nullable
+	Properties      string  `json:"properties" db:"properties"` // text tipini string olarak alırız
+	Enabled         bool    `json:"enabled" db:"enabled"`
+	Deleted         bool    `json:"deleted" db:"deleted"`
+	UserCount       *int    `json:"user_count" db:"user_count"` // Nullable
+	Type            *int    `json:"type" db:"type"`             // Nullable
+	Name            *string `json:"name" db:"name"`             // Nullable
+	TimeZone        *string `json:"time_zone" db:"time_zone"`   // Nullable
+	InUse           bool    `json:"in_use" db:"in_use"`
+	Master          *bool   `json:"master" db:"master"`       // Nullable
+	CpsLimit        *int    `json:"cps_limit" db:"cps_limit"` // Nullable
+	MaxLines        *int64  `json:"max_lines" db:"max_lines"` // Nullable (bigint -> int64)
+	RefreshStrategy int     `json:"refresh_strategy" db:"refresh_strategy"`
+	AriURL          *string `json:"ari_url" db:"ari_url"`           // Nullable
+	AriUsername     *string `json:"ari_username" db:"ari_username"` // Nullable
+	AriPassword     *string `json:"ari_password" db:"ari_password"` // Nullable
 }
 
 // WbpQueue, [dbo].[wbp_queue] tablosunun bir satırını temsil eder.
@@ -318,6 +367,7 @@ type Config struct {
 	HttpPort            int         `json:"HttpPort"`
 	AriConnections      []AriConfig `json:"ari_connections"`
 	DBConnectingString  string      `json:"DBConnectingString"`
+	QEAppConfig         map[string]string
 }
 
 type AriConfig struct {
