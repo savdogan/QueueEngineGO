@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -27,6 +28,8 @@ type Call struct {
 	LastDtmf                string       `json:"lastDtmf,omitempty"`
 	Skills                  []int64      `json:"skills,omitempty"`
 	QeueuLog                *WbpQueueLog `json:"-"`
+
+	IsExistsActiveMOH bool `json:"isExistsActiveMOH,omitempty"`
 
 	// --- Types -> Constant Tipleri ---
 	State               CALL_STATE              `json:"state"`
@@ -80,10 +83,13 @@ type Call struct {
 	ChannelName                     string                  `json:"channelName,omitempty"`
 	CurrentProcessName              PROCESS_NAME            `json:"currentProcessName,omitempty"`
 	CurrentCallScheduleAction       CALL_SCHEDULED_ACTION   `json:"currentCallScheduledAction,omitempty"`
+	PreparingCallScheduleAction     CALL_SCHEDULED_ACTION   `json:"preparingCallScheduleAction,omitempty"`
 	WaitingActions                  []CALL_SCHEDULED_ACTION `json:"waitingActions,omitempty"`
 	PeriodicPlayAnnounceCount       int                     `json:"periodicAnnouncePlayCount,omitempty"`
 	PositionAnnouncePlayCount       int                     `json:"positionAnnouncePlayCount,omitempty"`
 	ActionAnnouncePlayCount         int                     `json:"actionAnnouncePlayCount,omitempty"`
+
+	ActiveActionCancelFunc context.CancelFunc
 }
 
 type CallSetup struct {
@@ -230,6 +236,7 @@ func InstantiateCall(message *ari.StasisStart, uniqueId string, channel string, 
 	call.Application = message.Application
 
 	call.CurrentCallScheduleAction = CALL_SCHEDULED_ACTION_Empty
+	call.PreparingCallScheduleAction = CALL_SCHEDULED_ACTION_Empty
 
 	call.QueueName = callSetup.QueueName
 

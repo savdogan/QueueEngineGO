@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	_ "net/http/pprof"
 	"strings"
@@ -44,18 +45,19 @@ func (cm *CallManager) processCall(call *Call) {
 func (cm *CallManager) queueProcessStart(call *Call) {
 
 	call.Lock()
-	call_UniqueuId := call.UniqueId
+	call_UniqueId := call.UniqueId
 	call.CurrentProcessName = PROCESS_NAME_queue
 	call_QueueName := call.QueueName
 	call_InstanceID := call.InstanceID
+	g.CM.startMoh(call, true)
 	call.Unlock()
 
-	clog(LevelDebug, "Call is in Queue Process Start : %s ", call_UniqueuId)
+	clog(LevelDebug, "Call is in Queue Process Start : %s ", call_UniqueId)
 
 	currentQueue, err := g.QCM.GetQueueByName(call_QueueName)
 
 	if err != nil {
-		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueuId, call_QueueName)
+		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
 		return
 	}
 
@@ -70,37 +72,38 @@ func (cm *CallManager) queueProcessStart(call *Call) {
 
 		delay := time.Duration(queue_WaitTimeout) * time.Second
 
-		g.SM.ScheduleTask(call_UniqueuId, delay, func() {
-			processQueueAction(call_UniqueuId, CALL_SCHEDULED_ACTION_QueueTimeout)
+		g.SM.ScheduleTask(call_UniqueId, delay, func() {
+			processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_QueueTimeout)
 		})
 	} else {
-		clog(LevelDebug, "No Queue Timeout set for Call: %s , QueueName : %s", call_UniqueuId, call_QueueName)
+		clog(LevelDebug, "No Queue Timeout set for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
 	}
 
 	//scheduleClientAnnounce
 	//To Do: Get From AID call estimation time  and aşağıdaki koşula ekle
-	if queue_ClientAnnounceSoundFile != "" && queue_ClientAnnounceMinEstimationTime > 0 {
-
-		g.SM.ScheduleTask(call_UniqueuId, 1, func() {
-			processQueueAction(call_UniqueuId, CALL_SCHEDULED_ACTION_ClientAnnounce)
-		})
-	}
 
 	//schedulePeriodicAnnounce
-	go cm.setupPeriodicAnnounce(call_UniqueuId)
+	go cm.setupPeriodicAnnounce(call_UniqueId, true)
 	//scheduleActionAnnounce
-	go cm.setupActionAnnounce(call_UniqueuId)
+	go cm.setupActionAnnounce(call_UniqueId, true)
 	//schedulePositionAnnounce
-	go cm.setupPositionAnnounce(call_UniqueuId)
+	go cm.setupPositionAnnounce(call_UniqueId, true)
 
 	call.Lock()
 	call.State = CALL_STATE_InQueue
 	call.Unlock()
 
+	if queue_ClientAnnounceSoundFile != "" && queue_ClientAnnounceMinEstimationTime > 0 {
+
+		g.SM.ScheduleTask(call_UniqueId, 1, func() {
+			processQueueAction(call_UniqueId, CALL_SCHEDULED_ACTION_ClientAnnounce)
+		})
+	}
+
 	err = PublishNewInteractionMessage(NewCallInteraction{
 		Groups:              []int{},
 		InstanceID:          call_InstanceID,
-		InteractionID:       call_UniqueuId,
+		InteractionID:       call_UniqueId,
 		InteractionPriority: 5,
 		InteractionQueue:    call_QueueName,
 		PreferredAgent:      "",
@@ -109,11 +112,11 @@ func (cm *CallManager) queueProcessStart(call *Call) {
 	})
 
 	if err != nil {
-		clog(LevelError, "Publish New Interaction Message is failed for Call: %s , QueueName : %s , Error : %v", call_UniqueuId, call_QueueName, err)
+		clog(LevelError, "Publish New Interaction Message is failed for Call: %s , QueueName : %s , Error : %v", call_UniqueId, call_QueueName, err)
 		return
 	}
 
-	clog(LevelDebug, "Call is in Queue Process Setup Completed : %s ", call_UniqueuId)
+	clog(LevelDebug, "Call is in Queue Process Setup Completed : %s ", call_UniqueId)
 
 }
 
@@ -130,14 +133,6 @@ func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINAT
 	call_ConnectedUserName := call.ConnectedUserName
 	call_State := call.State
 
-	call.Bridge = ""
-	call.IsCallInDistribution = false
-	call.BridgedChannel = ""
-	call.ConnectedAgentId = 0
-	call.ConnectedAgentChannelID = ""
-	call.ConnectedUserName = ""
-	call.State = CALL_STATE_InQueue
-
 	if call_State == CALL_STATE_Terminated {
 		clog(LevelDebug, "[%s] Call already terminated. No action taken.", call_UniqueId)
 		call.Unlock() //------------------------------------------
@@ -146,6 +141,11 @@ func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINAT
 	call.State = CALL_STATE_Terminated
 	if call.TerminationReason == "" {
 		call.SetTerminationReason(terminationReason)
+	}
+
+	if call.ActiveActionCancelFunc != nil {
+		clog(LevelDebug, "[ON_TERMINATE] call.ActiveActionCancelFunc")
+		call.ActiveActionCancelFunc()
 	}
 
 	call.Unlock() //------------------------------------------
@@ -176,6 +176,17 @@ func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINAT
 
 }
 
+func (cm *CallManager) reScheduleAction(call_UniqueId string, action CALL_SCHEDULED_ACTION) {
+	switch action {
+	case CALL_SCHEDULED_ACTION_PeriodicAnnounce:
+		go cm.setupPeriodicAnnounce(call_UniqueId, false)
+	case CALL_SCHEDULED_ACTION_PositionAnnounce:
+		go cm.setupPositionAnnounce(call_UniqueId, false)
+	case CALL_SCHEDULED_ACTION_ActionAnnounce:
+		go cm.setupActionAnnounce(call_UniqueId, false)
+	}
+}
+
 func sendInteractionStateMessage(call *Call, state AID_DISTRIBUTION_STATE, agentUserName string) {
 
 	agentUserNameL := agentUserName
@@ -197,6 +208,43 @@ func sendInteractionStateMessage(call *Call, state AID_DISTRIBUTION_STATE, agent
 		QueueName:            call_QueueName,
 	})
 
+}
+
+// getMainInformations, arama nesnesinden (Call) temel bilgileri okur.
+//
+// Dönüş Değerleri (Sırasıyla):
+//  1. string:   UniqueId (Aramanın benzersiz kimliği)
+//  2. string:   ConnectionName (Bağlantı veya sunucu adı)
+//  3. string:   QueueName (Aramanın bulunduğu kuyruk adı)
+//  4. string:   ParentId (Varsa, bağlı olduğu üst aramanın kimliği)
+//  5. *ari.Key: ChannelKey (Asterisk kanal anahtarı/pointer'ı)
+func (call *Call) getMainInformations(callLocked bool) (string, string, string, string, *ari.Key) {
+
+	if !callLocked {
+		call.RLock()
+		defer call.RUnlock()
+	}
+
+	return call.UniqueId, call.ConnectionName, call.QueueName, call.ParentId, call.ChannelKey
+
+}
+
+func (call *Call) setActionProperties(callLocked bool, cancelFunc context.CancelFunc, action CALL_SCHEDULED_ACTION) {
+
+	if !callLocked {
+		call.Lock()
+		defer call.Unlock()
+	}
+
+	call.ActiveActionCancelFunc = cancelFunc
+	switch action {
+	case CALL_SCHEDULED_ACTION_ActionAnnounce:
+		call.ActionAnnouncePlayCount++
+	case CALL_SCHEDULED_ACTION_PeriodicAnnounce:
+		call.PeriodicPlayAnnounceCount++
+	case CALL_SCHEDULED_ACTION_PositionAnnounce:
+		call.PositionAnnouncePlayCount++
+	}
 }
 
 // onAidDistributionMessage, AID'den gelen dağıtım isteğini işler.

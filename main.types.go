@@ -14,6 +14,22 @@ const REDIS_DISTIRIBITION_CHANNEL_PREFIX = "channelAidDistribution"
 const REDIS_NEW_INTERACTION_CHANNEL = "channelInteractionForNAID"
 const REDIS_INTERACTION_STATE_CHANNEL = "channelQEInteractionState"
 const REDIS_GBWEBPHONE_CHANNEL = "channelGBWebPhone"
+const REDIS_POSITION_INFORMATION_CHANNEL_PREFIX = "channelPositionDistribution"
+const REDIS_QUEUE_MATCH_COUNT_CHANNEL = "channelQueueMatchCount"
+const MEDIA_URI_FILE_PREFIX = "sound:"
+
+// DistributionMessage, yayınlayacağımız mesajın ana yapısıdır
+type RedisPositionMessage struct {
+	InteractionID string `json:"interactionId"`
+	InstanceID    string `json:"instanceId"`
+	Position      int    `json:"position"`
+	PositionType  string `json:"positionType"`
+}
+
+type RedisQueueMatchCountMessage struct {
+	QueueName  string `json:"queueName"`
+	MatchCount int    `json:"matchCount"`
+}
 
 type NewCallInteraction struct {
 	// Ajanın yetkili olduğu grup ID'lerinin listesi
@@ -322,6 +338,26 @@ type Queue struct {
 	ReportPosition                  bool
 	ActionAnnounceWrongDtmfHandling bool
 	Migration                       int32
+	LastMatchCount                  int
+	LastMatchCountTime              time.Time
+	EstimationSecondPerCall         float64
+}
+
+type AnnouncementService struct {
+	call_EstimationTime         int
+	call_Position               int
+	queue_AnnouncePosition      string
+	queue_HoldTime              bool
+	call_SpellOutLanguage       LANGUAGE
+	queue_PrePositionAnnounce   string
+	queue_FirstPositionAnnounce string
+	queue_PostPositionAnnounce  string
+	queue_HoldTimeAnnounceFile  string
+	queue_HoldTimeMode          HoldTimeAnnounceMode
+	queue_MinAnnouncedHoldTime  int
+	queue_MaxAnnouncedHoldTime  int
+	queue_MoreThanFile          string
+	queue_LessThanFile          string
 }
 
 // Daha Sonra Kullanılacak...
@@ -398,6 +434,16 @@ const (
 	REDIS_PING_MESSAGE              = "ping"
 	COMPOSER_RESOURCE_KEY           = "description"
 	DEFAULT_IVR_ITERATION           = 1
+)
+
+type HoldTimeAnnounceMode int
+
+const (
+	ModeSecondsBy10Sec HoldTimeAnnounceMode = iota
+	ModeSecondsBy30Sec
+	ModeMinutesBy1Min
+	ModeMinutesBy10Sec
+	ModeMinutesBy30Sec
 )
 
 // Loglama Seviyeleri (main.go'dan taşındı)

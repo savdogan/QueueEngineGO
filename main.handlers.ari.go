@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/CyCoreSystems/ari/v6"
-	"github.com/CyCoreSystems/ari/v6/ext/play"
 )
 
 func OnOutboundChannelLeave(message *ari.StasisEnd, cl ari.Client, h *ari.ChannelHandle, connectionId string) {
@@ -89,7 +88,7 @@ func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Chan
 	go sendInteractionStateMessage(call, AID_DISTRIBUTION_STATE_Accepted, call.ConnectedUserName)
 
 	// 7. Mevcut Zamanlanmış Eylemleri İptal Etme (cancelCurrentActions())
-	g.SM.CancelByCallID(call_Uniqueu)
+	g.CM.cancelCallActions(call, true)
 
 	clog(LevelDebug, "[%s] All scheduled announcements cancelled.", call_Uniqueu)
 
@@ -101,6 +100,7 @@ func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Chan
 
 			return
 		}
+		clog(LevelInfo, "[%s] Bridge is successed.", call_Uniqueu)
 	}()
 }
 
@@ -254,11 +254,28 @@ func reSetupCallForQueue(call *Call, err error, reQueue bool) error {
 	if reQueue {
 
 		//To DO: setup annonunce yeniden.....
+		g.CM.startMoh(call, false)
 
 		go sendInteractionStateMessage(call, AID_DISTRIBUTION_STATE_Rejected, call_ConnectedUserName)
 	}
 
 	return err
+
+}
+
+func (cm *CallManager) cancelCallActions(call *Call, callLocked bool) {
+
+	g.SM.CancelByCallID(call.UniqueId)
+
+	if !callLocked {
+		call.RLock()
+	}
+
+	cm.stopMoh(call, true)
+
+	if !callLocked {
+		call.RUnlock()
+	}
 
 }
 
@@ -294,11 +311,11 @@ func manageBridge(ctx context.Context, h *ari.BridgeHandle, wg *sync.WaitGroup) 
 
 			clog(LevelDebug, "channel entered bridge %+v", v.Channel.Name)
 
-			go func() {
-				if err := play.Play(ctx, h, play.URI("sound:confbridge-join")).Err(); err != nil {
-					clog(LevelError, "failed to play join sound %s", err)
-				}
-			}()
+			//go func() {
+			//	if err := play.Play(ctx, h, play.URI("sound:confbridge-join")).Err(); err != nil {
+			//		clog(LevelError, "failed to play join sound %s", err)
+			//	}
+			//}()
 		case e, ok := <-leaveSub.Events():
 			if !ok {
 				clog(LevelError, "channel left subscription closed")
@@ -309,11 +326,11 @@ func manageBridge(ctx context.Context, h *ari.BridgeHandle, wg *sync.WaitGroup) 
 
 			clog(LevelDebug, "channel left bridge , %s", v.Channel.Name)
 
-			go func() {
-				if err := play.Play(ctx, h, play.URI("sound:confbridge-leave")).Err(); err != nil {
-					clog(LevelError, "failed to play leave sound %+v", err)
-				}
-			}()
+			//go func() {
+			//	if err := play.Play(ctx, h, play.URI("sound:confbridge-leave")).Err(); err != nil {
+			//		clog(LevelError, "failed to play leave sound %+v", err)
+			//	}
+			//}()
 		}
 	}
 }
@@ -343,7 +360,7 @@ func addSipHeaderVariable(variables map[string]string, header SIPHeader, value s
 
 func handleStasisEndMessage(message *ari.StasisEnd, cl ari.Client, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
 
-	clog(LevelInfo, "[%s] StasisEnd (connectionId : %s, application: %s, channel: %v)", ARI_MESSAGE_LOG_PREFIX, ariAppInfo.ConnectionName, message.Application, message.Channel)
+	clog(LevelTrace, "[%s] StasisEnd (connectionId : %s, application: %s, channel: %v)", ARI_MESSAGE_LOG_PREFIX, ariAppInfo.ConnectionName, message.Application, message.Channel)
 
 	if message.Channel.ID == "" {
 		log.Printf("ERROR: StasisStart message has no channel: %v", message)
@@ -362,7 +379,7 @@ func handleStasisEndMessage(message *ari.StasisEnd, cl ari.Client, h *ari.Channe
 
 func handleStasisStartMessage(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
 
-	clog(LevelInfo, "[%s] StasisStart (connectionId : %s, application: %s, channel: %v, args: %v)", ARI_MESSAGE_LOG_PREFIX, ariAppInfo.ConnectionName, message.Application, message.Channel, message.Args)
+	clog(LevelTrace, "[%s] StasisStart (connectionId : %s, application: %s, channel: %v, args: %v)", ARI_MESSAGE_LOG_PREFIX, ariAppInfo.ConnectionName, message.Application, message.Channel, message.Args)
 
 	if message.Channel.ID == "" {
 		log.Printf("ERROR: StasisStart message has no channel: %v", message)
@@ -387,16 +404,7 @@ func handleStasisStartMessage(message *ari.StasisStart, cl ari.Client, h *ari.Ch
 
 func handleDialMessage(message *ari.Dial) {
 
-	clog(LevelInfo, "[%s] Dial (connectionId : %s, application: %s, channel: %v)", ARI_MESSAGE_LOG_PREFIX, message.Application, message.Dialstatus, message.GetChannelIDs())
-
-	clog(LevelInfo, "message.Application %s", message.Application)
-	clog(LevelInfo, "message.Caller.ID %s", message.Caller.ID)
-	clog(LevelInfo, "message.Caller.State %s", message.Caller.State)
-	clog(LevelInfo, "message.Dialstatus %s", message.Dialstatus)
-	clog(LevelInfo, "message.Dialstring %s", message.Dialstring)
-	clog(LevelInfo, "message.Peer.ID %s", message.Peer.ID)
-	clog(LevelInfo, "message.Caller.State %s ", message.Caller.State)
-	clog(LevelInfo, "message.Peer.State %s ", message.Peer.State)
+	clog(LevelTrace, "[%s] Dial (connectionId : %s, application: %s, channel: %v)", ARI_MESSAGE_LOG_PREFIX, message.Application, message.Dialstatus, message.GetChannelIDs())
 
 	if message.Dialstatus == "" {
 		return
@@ -414,12 +422,12 @@ func handleDialMessage(message *ari.Dial) {
 
 func onOutboundChannelNoAnswer(peerId string, callerId string, dialStatus string) {
 
-	clog(LevelDebug, "Call onOutboundChannelNoAnswer, peerId : %s , caller Id : %s , dialStastus : %s", peerId, callerId, dialStatus)
+	clog(LevelTrace, "Call onOutboundChannelNoAnswer, peerId : %s , caller Id : %s , dialStastus : %s", peerId, callerId, dialStatus)
 
 	call, _, isCallFound, _ := g.CM.GetClientCallByAgentCall(peerId)
 
 	if !isCallFound {
-		clog(LevelDebug, "Call not found in onOutboundChannelNoAnswer, peerId : %s , caller Id : %s", peerId, callerId)
+		clog(LevelTrace, "Call not found in onOutboundChannelNoAnswer, peerId : %s , caller Id : %s", peerId, callerId)
 		return
 	}
 

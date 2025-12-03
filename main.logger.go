@@ -27,6 +27,11 @@ func (writer *ChannelWriter) Write(p []byte) (n int, err error) {
 
 var cfgLogDirectory string
 
+func clogE(level LogLevel, format string, v ...interface{}) error {
+	clog(level, format, v...)
+	return fmt.Errorf(format, v...)
+}
+
 func clog(level LogLevel, format string, v ...interface{}) {
 	// 1. Kontrol: Log seviyesi minimum seviyeden düşük öncelikli mi?
 	if level > cfgMinLogLevel {

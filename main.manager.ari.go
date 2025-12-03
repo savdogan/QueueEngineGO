@@ -255,7 +255,7 @@ func DebugARIInfo(url, user, pass string) {
 // handleAriEvent, gelen tüm ARI Event arayüzlerini işler. (Java'daki onSuccess eşleniği)
 func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 
-	clog(LevelInfo, "Ari Event : %+v", msg)
+	clog(LevelTrace, "Ari Event : %+v", msg)
 
 	appName := msg.GetApplication()
 
@@ -280,16 +280,16 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 		h := cl.Channel().Get(v.Key(ari.ChannelKey, v.Channel.ID))
 		go handleStasisEndMessage(msg.(*ari.StasisEnd), cl, h, ariAppInfo)
 	case *ari.ChannelEnteredBridge:
-		clog(LevelDebug, "[%s] ChannelEnteredBridge: Channel %s joined bridge %s", appName, channelID, v.Bridge.ID)
+		clog(LevelInfo, "[%s] ChannelEnteredBridge: Channel %s joined bridge %s", appName, channelID, v.Bridge.ID)
 
 	case *ari.ChannelLeftBridge:
-		clog(LevelDebug, "[%s] ChannelLeftBridge: Channel %s left bridge %s", appName, channelID, v.Bridge.ID)
+		clog(LevelInfo, "[%s] ChannelLeftBridge: Channel %s left bridge %s", appName, channelID, v.Bridge.ID)
 
 	case *ari.PlaybackStarted:
-		clog(LevelDebug, "[%s] PlaybackStarted: Playback %s started on %s", appName, v.Playback.ID, channelID)
+		clog(LevelInfo, "[%s] PlaybackStarted: Playback %s started on %s", appName, v.Playback.ID, channelID)
 
 	case *ari.PlaybackFinished:
-		clog(LevelDebug, "[%s] PlaybackFinished: Playback %s finished on %s", appName, v.Playback.ID, channelID)
+		clog(LevelInfo, "[%s] PlaybackFinished: Playback %s finished on %s", appName, v.Playback.ID, channelID)
 
 	case *ari.ChannelDtmfReceived:
 		clog(LevelInfo, "[%s] ChannelDtmfReceived: Channel %s, Digit: %s", appName, channelID, v.Digit)
@@ -305,16 +305,16 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 		go handleDialMessage(msg.(*ari.Dial))
 
 	case *ari.ChannelVarset:
-		clog(LevelDebug, "[%s] ChannelVarset: Channel %s, Var: %s, Value: %s", appName, channelID, v.Variable, v.Value)
+		clog(LevelTrace, "[%s] ChannelVarset: Channel %s, Var: %s, Value: %s", appName, channelID, v.Variable, v.Value)
 
 	case *ari.ChannelStateChange:
-		clog(LevelDebug, "[%s] ChannelStateChange: Channel %s is now %s", appName, v.Channel.ID, v.Channel.State)
+		clog(LevelInfo, "[%s] ChannelStateChange: Channel %s is now %s", appName, v.Channel.ID, v.Channel.State)
 
 	case *ari.ChannelDialplan:
-		clog(LevelTrace, "[%s] ChannelDialplan: Channel %s entered app %s", appName, channelID, v.DialplanApp)
+		clog(LevelInfo, "[%s] ChannelDialplan: Channel %s entered app %s", appName, channelID, v.DialplanApp)
 
 	default:
-		clog(LevelTrace, "[%s] Unhandled Event Type: %s", appName, msg.GetType())
+		clog(LevelInfo, "[%s] Unhandled Event Type: %s", appName, msg.GetType())
 	}
 }
 

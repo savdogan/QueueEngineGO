@@ -4,19 +4,131 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"time"
 )
+
+func handleOnQueueMatchCount(payload string) {
+
+	var rcdMessage RedisQueueMatchCountMessage
+
+	if err := json.Unmarshal([]byte(payload), &rcdMessage); err != nil {
+		clog(LevelError, "[MATCH_COUNT]Error : handleOnQueueMatchCount %v %s", err, payload)
+		return
+	}
+
+	if rcdMessage.QueueName == "" {
+		clog(LevelError, "[MATCH_COUNT] Error : QueueName is empty ")
+		return
+	}
+
+	currentQueue, err := g.QCM.GetQueueByName(rcdMessage.QueueName)
+
+	if err != nil {
+		clog(LevelError, "[MATCH_COUNT] Error : Queue(%s) not found.", rcdMessage.QueueName)
+		return
+	}
+
+	currentQueue.Lock()
+
+	countDifferent := rcdMessage.MatchCount - currentQueue.LastMatchCount
+
+	currentQueue.LastMatchCount = rcdMessage.MatchCount
+
+	secondsDifferent := time.Since(currentQueue.LastMatchCountTime).Seconds()
+
+	currentQueue.LastMatchCountTime = time.Now()
+
+	if secondsDifferent == 0 {
+		secondsDifferent = 1
+	}
+
+	currentQueue.EstimationSecondPerCall = float64(countDifferent) / secondsDifferent
+
+	clog(LevelTrace, "[MATCH_COUNT] currentQueue.EstimationSecondPerCall : %f for Queue(%s)", currentQueue.EstimationSecondPerCall, rcdMessage.QueueName)
+
+	currentQueue.Unlock()
+
+}
+
+func handleOnPositionMessage(payload string) {
+
+	var rcdMessage RedisPositionMessage
+
+	if err := json.Unmarshal([]byte(payload), &rcdMessage); err != nil {
+		clog(LevelError, "[REDIS_POSTION]Error : handleOnPositionMessage %v %s", err, payload)
+		return
+	}
+
+	if rcdMessage.InstanceID == "" || rcdMessage.InteractionID == "" {
+		clog(LevelError, "[REDIS_POSTION] Error : handleOnPositionMessage eksik alanlar var %s", payload)
+		return
+	}
+	g.Cfg.RLock()
+	instanceIDs := g.Cfg.InstanceIDs
+	g.Cfg.RUnlock()
+
+	if !containsString(instanceIDs, rcdMessage.InstanceID) {
+		clog(LevelDebug, "[REDIS_POSTION] Bu instance bu sunucuya ait değil, InstanceId : %s", rcdMessage.InstanceID)
+		return
+	}
+
+	call, found := g.CM.GetCall(rcdMessage.InteractionID)
+
+	if !found {
+		clog(LevelError, "[REDIS_POSTION] Error : handleOnAidDistributionMessage çağrı bulunamadı %s", payload)
+		return
+	}
+
+	clog(LevelTrace, "[REDIS_POSTION] Çağrı bulundu %s", payload)
+
+	call.RLock()
+	call_QueueName := call.QueueName
+	call.RUnlock()
+
+	currentQueue, err := g.QCM.GetQueueByName(call_QueueName)
+
+	if err != nil {
+		clog(LevelError, "[REDIS_POSTION] Error : Queue(%s) not found call id %s", call_QueueName, rcdMessage.InteractionID)
+		return
+	}
+
+	currentQueue.RLock()
+	queue_EstimationSecondPerCall := currentQueue.EstimationSecondPerCall
+	currentQueue.RUnlock()
+
+	call.Lock()
+
+	switch rcdMessage.PositionType {
+
+	case "Initial":
+		call.QeueuLog.InitialPosition = &rcdMessage.Position
+		if queue_EstimationSecondPerCall > 0 {
+			if call.QeueuLog.InitialPosition != nil {
+				sonuc := int(queue_EstimationSecondPerCall * float64(*call.QeueuLog.InitialPosition))
+				call.QeueuLog.InitialWaitEstimation = &sonuc
+			}
+		}
+	case "Current":
+		call.QeueuLog.FinalPosition = &rcdMessage.Position
+	default:
+		clog(LevelDebug, "[REDIS_POSTION] Error : Unknown PositionType %s", rcdMessage.PositionType)
+	}
+
+	call.Unlock()
+
+}
 
 func handleOnAidDistributionMessage(payload string) {
 
 	var rcdMessage RedisCallDistributionMessage
 
 	if err := json.Unmarshal([]byte(payload), &rcdMessage); err != nil {
-		clog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage %v %s", err, payload)
+		clog(LevelError, "[REDIS] Error : handleOnAidDistributionMessage %v %s", err, payload)
 		return
 	}
 
 	if rcdMessage.InstanceID == "" || rcdMessage.InteractionID == "" || rcdMessage.QueueName == "" || len(rcdMessage.Users) == 0 || rcdMessage.Users[0].Username == "" || rcdMessage.Users[0].ID == 0 {
-		clog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage eksik alanlar var %s", payload)
+		clog(LevelError, "[REDIS] Error : handleOnAidDistributionMessage eksik alanlar var %s", payload)
 		return
 	}
 	g.Cfg.RLock()
@@ -31,7 +143,7 @@ func handleOnAidDistributionMessage(payload string) {
 	call, found := g.CM.GetCall(rcdMessage.InteractionID)
 
 	if !found {
-		clog(LevelError, "[REDIS] Hata : handleOnAidDistributionMessage çağrı bulunamadı %s", payload)
+		clog(LevelError, "[REDIS] Error : handleOnAidDistributionMessage çağrı bulunamadı %s", payload)
 		return
 	}
 
@@ -45,7 +157,7 @@ func PublishNewInteractionMessage(newInteraction NewCallInteraction) error {
 
 	payloadBytes, err := json.Marshal(newInteraction)
 	if err != nil {
-		clog(LevelError, "[REDIS PUBLISH] Hata : PublishNewInterActionMessage json marshal %v", err)
+		clog(LevelError, "[REDIS PUBLISH] Error : PublishNewInterActionMessage json marshal %v", err)
 		return err
 	}
 	redisChannelName := REDIS_NEW_INTERACTION_CHANNEL
@@ -58,7 +170,7 @@ func PublishInteractionStateMessage(interactionState InteractionState) error {
 
 	payloadBytes, err := json.Marshal(interactionState)
 	if err != nil {
-		clog(LevelError, "[REDIS PUBLISH] Hata : PublishInteractionStateMessage json marshal %v", err)
+		clog(LevelError, "[REDIS PUBLISH] Error : PublishInteractionStateMessage json marshal %v", err)
 		return err
 	}
 	redisChannelName := REDIS_INTERACTION_STATE_CHANNEL
@@ -77,9 +189,9 @@ func PublishMessageViaRedis(redisChannelName string, payload []byte) error {
 	// 2. Mesajı Redis'e yayımlama
 	cmd := g.RPubs.Publish(g.Ctx, redisChannelName, payload)
 
-	// Hata kontrolü
+	// Error kontrolü
 	if cmd.Err() != nil {
-		clog(LevelError, "[REDIS PUBLISH ERROR] Mesaj yayınlama hatası: Kanal=%s, Hata=%+v", redisChannelName, cmd.Err())
+		clog(LevelError, "[REDIS PUBLISH ERROR] Mesaj yayınlama Errorsı: Kanal=%s, Error=%+v", redisChannelName, cmd.Err())
 		return cmd.Err()
 	}
 
@@ -95,9 +207,11 @@ func startRedisListener() {
 
 	for _, instanceId := range instanceIds {
 		channels = append(channels, REDIS_DISTIRIBITION_CHANNEL_PREFIX+instanceId)
+		channels = append(channels, REDIS_POSITION_INFORMATION_CHANNEL_PREFIX+instanceId)
 	}
 
 	channels = append(channels, REDIS_GBWEBPHONE_CHANNEL)
+	channels = append(channels, REDIS_QUEUE_MATCH_COUNT_CHANNEL)
 
 	pubsub := g.RSubs.Subscribe(g.Ctx, channels...)
 
@@ -108,22 +222,22 @@ func startRedisListener() {
 		ch := pubsub.Channel()
 
 		for msg := range ch {
-			clog(LevelInfo, "[REDIS] 1 Mesaj Alındı. Kanal: %s, Payload: %s", msg.Channel, msg.Payload)
+			clog(LevelTrace, "[REDIS] 1 Mesaj Alındı. Kanal: %s, Payload: %s", msg.Channel, msg.Payload)
 
 			redisMessageChannelName := msg.Channel
 
 			//Birden faz instance oalbilir ona göre işlem yapacak sekilde kanalı normalize et
 			if strings.HasPrefix(redisMessageChannelName, REDIS_DISTIRIBITION_CHANNEL_PREFIX) {
 				go handleOnAidDistributionMessage(msg.Payload)
+			} else if strings.HasPrefix(redisMessageChannelName, REDIS_POSITION_INFORMATION_CHANNEL_PREFIX) {
+				go handleOnPositionMessage(msg.Payload)
 			} else {
-
 				// Kanal tipine göre mesaj işleme mantığı
 				switch msg.Channel {
-
+				case REDIS_QUEUE_MATCH_COUNT_CHANNEL:
+					go handleOnQueueMatchCount(msg.Payload)
 				case REDIS_GBWEBPHONE_CHANNEL:
 					go handleWebphoneMessage(msg.Payload)
-				default:
-					clog(LevelError, "[REDIS] Bilinmeyen kanaldan mesaj alındı: %s", msg.Channel)
 				}
 			}
 		}

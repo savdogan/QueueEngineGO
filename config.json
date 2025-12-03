@@ -5,7 +5,7 @@
     ],
     "RedisPassword": "foobared",
     "LoadSnapshotOnStart": false,
-    "MinLogLevel": 5,
+    "MinLogLevel": 4,
     "publisherHostName": "GB90015176N1",
     "LogDirectory": "logs",
     "HttpServerEnabled": true,
