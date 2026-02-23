@@ -23,10 +23,8 @@ func NewCallManager() *CallManager {
 
 // processNewInboundCall, yeni bir Call nesnesini yöneticinin listesine ekler.
 func (cm *CallManager) processNewInboundCall(call *Call) {
-	// Yazma işlemi olduğu için tam kilit (Lock) kullanıyoruz
-	cm.Lock()
-	cm.calls[call.UniqueId] = call
-	cm.Unlock()
+
+	cm.AddCall(call.UniqueId, call)
 
 	logCallInfo(call, fmt.Sprintf("[ADDED]: %s , Call Manager Calls Count : %d", call.UniqueId, len(cm.calls)))
 
@@ -35,7 +33,8 @@ func (cm *CallManager) processNewInboundCall(call *Call) {
 }
 
 func (cm *CallManager) processCall(call *Call) {
-	// Yazma işlemi olduğu için tam kilit (Lock) kullanıyoruz
+
+	//Konerans ayrımı burada olacak
 
 	//To DO: burada konference nasıl seçeceğiz
 	cm.queueProcessStart(call)
@@ -45,12 +44,16 @@ func (cm *CallManager) processCall(call *Call) {
 func (cm *CallManager) queueProcessStart(call *Call) {
 
 	call.Lock()
-	call_UniqueId := call.UniqueId
+
 	call.CurrentProcessName = PROCESS_NAME_queue
+	call.State = CALL_STATE_InQueue
+
+	call_UniqueId := call.UniqueId
 	call_QueueName := call.QueueName
 	call_InstanceID := call.InstanceID
-	g.CM.startMoh(call, true)
 	call.Unlock()
+
+	g.CM.startMoh(call, false)
 
 	clog(LevelDebug, "Call is in Queue Process Start : %s ", call_UniqueId)
 
@@ -79,19 +82,12 @@ func (cm *CallManager) queueProcessStart(call *Call) {
 		clog(LevelDebug, "No Queue Timeout set for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
 	}
 
-	//scheduleClientAnnounce
-	//To Do: Get From AID call estimation time  and aşağıdaki koşula ekle
-
 	//schedulePeriodicAnnounce
 	go cm.setupPeriodicAnnounce(call_UniqueId, true)
 	//scheduleActionAnnounce
 	go cm.setupActionAnnounce(call_UniqueId, true)
 	//schedulePositionAnnounce
 	go cm.setupPositionAnnounce(call_UniqueId, true)
-
-	call.Lock()
-	call.State = CALL_STATE_InQueue
-	call.Unlock()
 
 	if queue_ClientAnnounceSoundFile != "" && queue_ClientAnnounceMinEstimationTime > 0 {
 
@@ -112,7 +108,7 @@ func (cm *CallManager) queueProcessStart(call *Call) {
 	})
 
 	if err != nil {
-		clog(LevelError, "Publish New Interaction Message is failed for Call: %s , QueueName : %s , Error : %v", call_UniqueId, call_QueueName, err)
+		clog(LevelError, "[PUBLISH_NEW_INTERACTION] Failed for Call: %s , QueueName : %s , Error : %v", call_UniqueId, call_QueueName, err)
 		return
 	}
 
@@ -148,7 +144,11 @@ func (cm *CallManager) terminateCall(call *Call, terminationReason CALL_TERMINAT
 		call.ActiveActionCancelFunc()
 	}
 
+	call.WaitingActions = []CALL_SCHEDULED_ACTION{}
+
 	call.Unlock() //------------------------------------------
+
+	g.SM.CancelByCallID(call_UniqueId)
 
 	ariClient, found := g.ACM.GetClient(call_ConnectionName)
 	if found {
@@ -218,14 +218,14 @@ func sendInteractionStateMessage(call *Call, state AID_DISTRIBUTION_STATE, agent
 //  3. string:   QueueName (Aramanın bulunduğu kuyruk adı)
 //  4. string:   ParentId (Varsa, bağlı olduğu üst aramanın kimliği)
 //  5. *ari.Key: ChannelKey (Asterisk kanal anahtarı/pointer'ı)
-func (call *Call) getMainInformations(callLocked bool) (string, string, string, string, *ari.Key) {
+func (call *Call) getMainInformations(callLocked bool) (string, string, string, string, *ari.Key, string) {
 
 	if !callLocked {
 		call.RLock()
 		defer call.RUnlock()
 	}
 
-	return call.UniqueId, call.ConnectionName, call.QueueName, call.ParentId, call.ChannelKey
+	return call.UniqueId, call.ConnectionName, call.QueueName, call.ParentId, call.ChannelKey, call.InstanceID
 
 }
 
@@ -627,4 +627,25 @@ func (call *Call) LogOnTerminate() {
 	if err := g.QCM.InsertQueueLog(qLog); err != nil {
 		clog(LevelError, "Could not save QueueLog: %v", err)
 	}
+}
+
+// buildAgentUri: Temsilcinin URI'sini oluşturur (Örnek)
+// Java'daki User sınıfının karşılığı olan UserDist struct'ını kullanır.
+func buildAgentUri(user UserDist) string {
+	// Java mantığına göre bir URI oluşturur (Örn: "PJSIP/John@trunk")
+	return fmt.Sprintf("SIP/%s-%d@${REGAGENT%s}", user.Username, user.ID, user.Username)
+}
+
+// getCdrVariableName: CDR değişken adını alır (Örnek)
+// Java'da Enum'u string'e çeviriyor.
+func getCdrVariableName(variable DIALPLAN_VARIABLE) string {
+	return fmt.Sprintf("CDR(%s)", variable) // Varsayılan CDR ön eki
+}
+
+// addSipHeaderVariable: SIP başlık değişkenini variables map'ine ekler.
+func addSipHeaderVariable(variables map[string]string, header SIPHeader, value string) {
+	// SIP başlıkları genellikle 'SIPADDHEADER' formatında değişken olarak ayarlanır.
+	// Örneğin: SIPADDHEADER(X-Header-Name)=Value
+	variableName := fmt.Sprintf("__SIPADDHEADER(%s)", header.SequenceValue)
+	variables[variableName] = value
 }

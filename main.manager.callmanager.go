@@ -6,8 +6,8 @@ import "github.com/CyCoreSystems/ari/v6"
 // Eşzamanlı okuma için uygundur.
 func (cm *CallManager) AddCall(uniqueId string, call *Call) *Call {
 	// Okuma işlemi olduğu için okuma kilidi (RLock) kullanıyoruz
-	cm.RLock()
-	defer cm.RUnlock()
+	cm.Lock()
+	defer cm.Unlock()
 
 	cm.calls[uniqueId] = call
 	return call
@@ -16,9 +16,9 @@ func (cm *CallManager) AddCall(uniqueId string, call *Call) *Call {
 // GetCall, UniqueId kullanarak bir Call nesnesini döndürür.
 // Eşzamanlı okuma için uygundur.
 func (cm *CallManager) AddOutBoundCall(uniqueId string, channelHandle *ari.ChannelHandle) *ari.ChannelHandle {
-	// Okuma işlemi olduğu için okuma kilidi (RLock) kullanıyoruz
-	cm.RLock()
-	defer cm.RUnlock()
+
+	cm.Lock()
+	defer cm.Unlock()
 
 	cm.outChannels[uniqueId] = channelHandle
 	return channelHandle
@@ -39,8 +39,8 @@ func (cm *CallManager) GetCall(uniqueId string) (*Call, bool) {
 // Eşzamanlı okuma için uygundur.
 func (cm *CallManager) AddAgentCallMap(agentCallUniqeuId string, callUniqueId string) {
 	// Okuma işlemi olduğu için okuma kilidi (RLock) kullanıyoruz
-	cm.RLock()
-	defer cm.RUnlock()
+	cm.Lock()
+	defer cm.Unlock()
 
 	cm.agentCalltoCall[agentCallUniqeuId] = callUniqueId
 }

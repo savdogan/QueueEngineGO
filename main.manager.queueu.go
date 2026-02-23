@@ -43,6 +43,23 @@ func (m *QueueCacheManager) GetQueueByName(queueName string) (*Queue, error) {
 	return newQueue, nil
 }
 
+// GetQueueByName, önce önbelleği kontrol eder, yoksa veritabanından çeker (Lazy Loading).
+func (m *QueueCacheManager) GetQueueMusicClass(queueName string) string {
+
+	currentQueue, err := m.GetQueueByName(queueName)
+
+	if err != nil {
+		clog(LevelError, "Queue not found : %s ", queueName)
+		return ""
+	}
+
+	currentQueue.RLock()
+	defer currentQueue.RUnlock()
+
+	return currentQueue.MusicClass
+
+}
+
 // Load Queue Name
 func (m *QueueCacheManager) LoadQueue(queueName string) (*Queue, error) {
 	// --- 2. Veritabanından Çekme ---

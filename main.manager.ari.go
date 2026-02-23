@@ -271,14 +271,13 @@ func handleAriEvent(msg ari.Event, cl ari.Client, ariAppInfo AriAppInfo) {
 	switch v := msg.(type) {
 
 	case *ari.StasisStart:
-		clog(LevelInfo, "[%s] StasisStart: Channel %s entered. Args: %v", appName, channelID, v.Args)
+		clog(LevelInfo, "[StasisStart] %s ,appName %s,  Args: %v", channelID, appName, v.Args)
 		// Kanala özgü işleyiciyi başlat
 		h := cl.Channel().Get(v.Key(ari.ChannelKey, v.Channel.ID))
-		go handleStasisStartMessage(msg.(*ari.StasisStart), cl, h, ariAppInfo)
+		go handleStasisStartMessage(msg.(*ari.StasisStart), h, ariAppInfo)
 	case *ari.StasisEnd:
-		clog(LevelInfo, "[%s] StasisEnd: Channel %s left.", appName, channelID)
-		h := cl.Channel().Get(v.Key(ari.ChannelKey, v.Channel.ID))
-		go handleStasisEndMessage(msg.(*ari.StasisEnd), cl, h, ariAppInfo)
+		clog(LevelInfo, "[StasisEnd]  %s, appName %s", channelID, appName)
+		go handleStasisEndMessage(msg.(*ari.StasisEnd), ariAppInfo)
 	case *ari.ChannelEnteredBridge:
 		clog(LevelInfo, "[%s] ChannelEnteredBridge: Channel %s joined bridge %s", appName, channelID, v.Bridge.ID)
 

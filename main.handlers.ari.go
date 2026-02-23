@@ -1,19 +1,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log"
-	"sync"
 
 	"github.com/CyCoreSystems/ari/v6"
 )
 
-func OnOutboundChannelLeave(message *ari.StasisEnd, cl ari.Client, h *ari.ChannelHandle, connectionId string) {
+func onOutboundChannelLeave(message *ari.StasisEnd) {
 
-	clog(LevelInfo, "Outbound kanalından çıkış yapıldı..")
-
-	clog(LevelInfo, "------------------ message.Channel.ID : %s", message.Channel.ID)
+	clog(LevelInfo, "[OUTBOUND_EXITED] %s", message.Channel.ID)
 
 	call, _, isCallFound, _ := g.CM.GetClientCallByAgentCall(message.Channel.ID)
 
@@ -37,8 +32,32 @@ func OnOutboundChannelLeave(message *ari.StasisEnd, cl ari.Client, h *ari.Channe
 	call.Unlock()
 }
 
-// OnOutboundChannelEnter, temsilci kanalı stasis'e girdiğinde çağrılır.
-func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle, connectionId string) {
+func onClientChannelLeave(message *ari.StasisEnd) {
+
+	clog(LevelInfo, "[INBOUND_EXITED] [%s] ", message.Channel.ID)
+
+	call, found := g.CM.GetCall(message.Channel.ID)
+
+	if !found {
+		clog(LevelInfo, "Call is not found : %s", message.Channel.ID)
+		return
+	}
+
+	call.Lock()
+	defer call.Unlock()
+
+	call_TerminationReason := CALL_TERMINATION_REASON_ClientHangup
+
+	if call.State == CALL_STATE_BridgedWithAgent {
+		call_TerminationReason = CALL_TERMINATION_REASON_Abandon
+	}
+
+	go g.CM.terminateCall(call, call_TerminationReason)
+
+}
+
+// onOutboundChannelEnter, temsilci kanalı stasis'e girdiğinde çağrılır.
+func onOutboundChannelEnter(message *ari.StasisStart, h *ari.ChannelHandle) {
 
 	agentChannelID := message.Channel.ID
 
@@ -52,22 +71,18 @@ func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Chan
 	call.Lock()
 	defer call.Unlock()
 
-	// 2. Kilit Al ve Serbest Bırak
-
 	// 3. Durum Kontrolü (Java: if (call.getState() == CALL_STATE.BRIDGED_WITH_AGENT))
 	if call.State == CALL_STATE_BridgedWithAgent {
-		clog(LevelInfo, "[%s] Got new outbound channel enter for already bridged call: %s. Terminating the new channel...", call_Uniqueu, agentChannelID)
-
-		// TO DO: ariFacade.hangup(call, channelId); eşleniği
-		// Hata kontrolü eklenmelidir.
-		_ = h.Hangup()
-		return
+		clog(LevelInfo, "[CALL_ALREADY_BRIDGED] [%s] Got new outbound channel enter for already bridged call: %s. Terminating the new channel...", call_Uniqueu, agentChannelID)
+		err := h.Hangup()
+		if err != nil {
+			clog(LevelError, "[CALL_ALREADY_BRIDGED_HANGUP_ERROR] %s", call.UniqueId)
+			return
+		}
 	}
 
 	// 5. Başarılı Atama ve Durum Güncelleme
 	clog(LevelInfo, "[%s] Bridging client with agent channel %s", call_Uniqueu, agentChannelID)
-
-	// Java: attempt.setDialStatus(DIAL_STATUS.ANSWER);
 
 	// Java: call.setState(CALL_STATE.BRIDGED_WITH_AGENT);
 	call.State = CALL_STATE_BridgedWithAgent
@@ -77,7 +92,6 @@ func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Chan
 	// 6. Harici Sistemleri Bilgilendirme (TO DO'lar)
 
 	// queueLogger.onConnectAttemptSuccess(attempt);
-	// TO DO: globalQueueLogger.OnConnectAttemptSuccess(attempt)
 	call.LogOnConnectAttemptSuccess(false)
 
 	// aidFacade.publishDistributionAttemptResult(...)
@@ -85,60 +99,22 @@ func OnOutboundChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Chan
 
 	// callEventPublisher.publishCallQueueLeaveEvent(call);
 	// TO DO: globalCallEventPublisher.PublishCallQueueLeaveEvent(call)
-	go sendInteractionStateMessage(call, AID_DISTRIBUTION_STATE_Accepted, call.ConnectedUserName)
 
 	// 7. Mevcut Zamanlanmış Eylemleri İptal Etme (cancelCurrentActions())
 	g.CM.cancelCallActions(call, true)
-
-	clog(LevelDebug, "[%s] All scheduled announcements cancelled.", call_Uniqueu)
 
 	// 8. Köprüleme İşlemi (bridgeCall(channelId))
 	// CallManager metodu olarak çağrılır.
 	go func() {
 		if err := g.CM.bridgeCall(call, agentChannelID); err != nil {
 			clog(LevelError, "[%s] Failed to bridge call: %v", call_Uniqueu, err)
-
 			return
 		}
 		clog(LevelInfo, "[%s] Bridge is successed.", call_Uniqueu)
+		go sendInteractionStateMessage(call, AID_DISTRIBUTION_STATE_Accepted, call.ConnectedUserName)
 	}()
 }
 
-/*
-// dropDistributionLatecomers, OnOutboundChannelEnter içinden Lock altında çağrılır.
-func (cm *CallManager) dropDistributionLatecomers(call *Call, answeredChannelID string) {
-	// Burada kilit zaten OnOutboundChannelEnter tarafından tutuluyor olmalı.
-
-	// Temsilcinin ARI istemcisine erişmek için ConnectionId kullanılır.
-	ariClient, found := g.ACM.GetClient(call.ConnectionName)
-	if !found {
-		clog(LevelError, "[%s] Cannot drop latecomers: ARI Client not found.", call.UniqueId)
-		return
-	}
-
-	for currentChannelID := range call.CurrentDistributionAttempts {
-		if currentChannelID != answeredChannelID {
-			clog(LevelDebug, "[%s] Dropping latecomer channel: %s", call.UniqueId, currentChannelID)
-
-			// Kanala erişim ve kapatma
-			latecomerChannelHandle := ariClient.Channel().Get(currentChannelID)
-
-			if err := latecomerChannelHandle.Hangup(); err != nil {
-				clog(LevelError, "[%s] Failed to hangup latecomer %s: %v", call.UniqueId, currentChannelID, err)
-				// Hata olsa bile devam et.
-			}
-
-			// Haritadan silme (Zaten Lock altındayız)
-			delete(call.CurrentDistributionAttempts, currentChannelID)
-		}
-	}
-} */
-
-const BRIDGE_PREFIX = "queue-" // Varsayımsal köprü ön eki
-
-// bridgeCall, çağrı kanallarını yeni bir köprüye ekler ve değişkenleri ayarlar.
-// Bu fonksiyon, kendisini çağıran (OnOutboundChannelEnter) fonksiyonun zaten
-// call nesnesi üzerinde yazma kilidi tuttuğunu varsayar.
 func (cm *CallManager) bridgeCall(call *Call, agentChannelID string) error {
 
 	call.Lock()
@@ -173,8 +149,6 @@ func (cm *CallManager) bridgeCall(call *Call, agentChannelID string) error {
 		return reSetupCallForQueue(call, err, true)
 	}
 
-	// 4. Kanalları Köprüye Ekleme (ari.Client.Channel().Get(id).AddToBridge)
-
 	// a. İstemci Kanalını Köprüye Ekle
 	clientChannelHandle := ariClient.Channel().Get(ari.NewKey(ari.ChannelKey, clientcall_ChannelID))
 
@@ -203,14 +177,6 @@ func (cm *CallManager) bridgeCall(call *Call, agentChannelID string) error {
 	}
 
 	clog(LevelInfo, "[%s] Call successfully bridged: %s", clientcall_ChannelID, bridgeID)
-
-	wg := new(sync.WaitGroup)
-
-	wg.Add(1)
-
-	go manageBridge(g.Ctx, bridge, wg)
-
-	wg.Wait()
 
 	return nil // Başarılı
 }
@@ -268,137 +234,64 @@ func (cm *CallManager) cancelCallActions(call *Call, callLocked bool) {
 	g.SM.CancelByCallID(call.UniqueId)
 
 	if !callLocked {
-		call.RLock()
+		call.Lock()
 	}
+
+	call.WaitingActions = []CALL_SCHEDULED_ACTION{}
 
 	cm.stopMoh(call, true)
 
+	if call.ActiveActionCancelFunc != nil {
+		call.ActiveActionCancelFunc()
+	}
+
 	if !callLocked {
-		call.RUnlock()
+		call.Unlock()
 	}
 
 }
 
-func manageBridge(ctx context.Context, h *ari.BridgeHandle, wg *sync.WaitGroup) {
-	// Delete the bridge when we exit
-	defer h.Delete() //nolint:errcheck
-
-	destroySub := h.Subscribe(ari.Events.BridgeDestroyed)
-	defer destroySub.Cancel()
-
-	enterSub := h.Subscribe(ari.Events.ChannelEnteredBridge)
-	defer enterSub.Cancel()
-
-	leaveSub := h.Subscribe(ari.Events.ChannelLeftBridge)
-	defer leaveSub.Cancel()
-
-	wg.Done()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-destroySub.Events():
-			clog(LevelDebug, "bridge destroyed")
-			return
-		case e, ok := <-enterSub.Events():
-			if !ok {
-				clog(LevelError, "channel entered subscription closed")
-				return
-			}
-
-			v := e.(*ari.ChannelEnteredBridge)
-
-			clog(LevelDebug, "channel entered bridge %+v", v.Channel.Name)
-
-			//go func() {
-			//	if err := play.Play(ctx, h, play.URI("sound:confbridge-join")).Err(); err != nil {
-			//		clog(LevelError, "failed to play join sound %s", err)
-			//	}
-			//}()
-		case e, ok := <-leaveSub.Events():
-			if !ok {
-				clog(LevelError, "channel left subscription closed")
-				return
-			}
-
-			v := e.(*ari.ChannelLeftBridge)
-
-			clog(LevelDebug, "channel left bridge , %s", v.Channel.Name)
-
-			//go func() {
-			//	if err := play.Play(ctx, h, play.URI("sound:confbridge-leave")).Err(); err != nil {
-			//		clog(LevelError, "failed to play leave sound %+v", err)
-			//	}
-			//}()
-		}
-	}
-}
-
-// buildAgentUri: Temsilcinin URI'sini oluşturur (Örnek)
-// Java'daki User sınıfının karşılığı olan UserDist struct'ını kullanır.
-func buildAgentUri(user UserDist) string {
-	// Java mantığına göre bir URI oluşturur (Örn: "PJSIP/John@trunk")
-	return fmt.Sprintf("SIP/%s-%d@${REGAGENT%s}", user.Username, user.ID, user.Username)
-}
-
-// getCdrVariableName: CDR değişken adını alır (Örnek)
-// Java'da Enum'u string'e çeviriyor.
-func getCdrVariableName(variable DIALPLAN_VARIABLE) string {
-	return fmt.Sprintf("CDR(%s)", variable) // Varsayılan CDR ön eki
-}
-
-// addSipHeaderVariable: SIP başlık değişkenini variables map'ine ekler.
-func addSipHeaderVariable(variables map[string]string, header SIPHeader, value string) {
-	// SIP başlıkları genellikle 'SIPADDHEADER' formatında değişken olarak ayarlanır.
-	// Örneğin: SIPADDHEADER(X-Header-Name)=Value
-	variableName := fmt.Sprintf("__SIPADDHEADER(%s)", header.SequenceValue)
-	variables[variableName] = value
-}
-
-//handleStasisEndMessage
-
-func handleStasisEndMessage(message *ari.StasisEnd, cl ari.Client, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
+func handleStasisEndMessage(message *ari.StasisEnd, ariAppInfo AriAppInfo) {
 
 	clog(LevelTrace, "[%s] StasisEnd (connectionId : %s, application: %s, channel: %v)", ARI_MESSAGE_LOG_PREFIX, ariAppInfo.ConnectionName, message.Application, message.Channel)
 
 	if message.Channel.ID == "" {
-		log.Printf("ERROR: StasisStart message has no channel: %v", message)
+		clog(LevelError, "[StasisEnd] message has no channel %+v", message)
 		return // Kanal yoksa işlemi durdur
 	}
 
 	// Client Uygulamasına Giriş
 	if isInboundApplication(message.Application) {
-		OnClientChannelLeave(message, cl, h, ariAppInfo)
+		onClientChannelLeave(message)
 	} else if isOutboundApplication(message.Application) {
-		OnOutboundChannelLeave(message, cl, h, ariAppInfo.ConnectionName)
+		onOutboundChannelLeave(message)
 	} else {
-		log.Printf("ERROR: Got StasisEnd for unknown ARI application: %s", message.Application)
+		clog(LevelError, "[UNKNOWN_APPLICATION] Got StasisEnd for unknown ARI application: %s", message.Application)
 	}
 }
 
-func handleStasisStartMessage(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
+func handleStasisStartMessage(message *ari.StasisStart, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
 
 	clog(LevelTrace, "[%s] StasisStart (connectionId : %s, application: %s, channel: %v, args: %v)", ARI_MESSAGE_LOG_PREFIX, ariAppInfo.ConnectionName, message.Application, message.Channel, message.Args)
 
 	if message.Channel.ID == "" {
-		log.Printf("ERROR: StasisStart message has no channel: %v", message)
+		clog(LevelError, "[StasisStart] message has no channel %+v", message)
 		return // Kanal yoksa işlemi durdur
 	}
 
 	// Args kontrolü. Go'da boş string dizisi kontrolü: len(message.Args) == 0
 	if len(message.Args) == 0 {
-		log.Printf("ERROR: StasisStart message has no arguments: %v", message)
+		clog(LevelError, "[NO_ARGUMENT] %s message has no arguments: %v", message.Channel.ID, message)
 		return // Argüman yoksa işlemi durdur
 	}
 
 	// Client Uygulamasına Giriş
 	if isInboundApplication(message.Application) {
-		OnClientChannelEnter(message, cl, h, ariAppInfo)
+		onClientChannelEnter(message, h, ariAppInfo)
 	} else if isOutboundApplication(message.Application) {
-		OnOutboundChannelEnter(message, cl, h, ariAppInfo.ConnectionName)
+		onOutboundChannelEnter(message, h)
 	} else {
-		log.Printf("ERROR: Got StasisStart for unknown ARI application: %s", message.Application)
+		clog(LevelError, "[UNKNOWN_APPLICATION] Got StasisEnd for unknown ARI application: %s", message.Application)
 	}
 }
 
@@ -424,10 +317,10 @@ func onOutboundChannelNoAnswer(peerId string, callerId string, dialStatus string
 
 	clog(LevelTrace, "Call onOutboundChannelNoAnswer, peerId : %s , caller Id : %s , dialStastus : %s", peerId, callerId, dialStatus)
 
-	call, _, isCallFound, _ := g.CM.GetClientCallByAgentCall(peerId)
+	call, _, found, _ := g.CM.GetClientCallByAgentCall(peerId)
 
-	if !isCallFound {
-		clog(LevelTrace, "Call not found in onOutboundChannelNoAnswer, peerId : %s , caller Id : %s", peerId, callerId)
+	if !found {
+		clog(LevelTrace, "[CALL_NOT_FOUND] %s in onOutboundChannelNoAnswer, peerId : %s ", callerId, peerId)
 		return
 	}
 
@@ -439,58 +332,22 @@ func onOutboundChannelNoAnswer(peerId string, callerId string, dialStatus string
 
 }
 
-func OnClientChannelLeave(message *ari.StasisEnd, cl ari.Client, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
-	clog(LevelInfo, "Inbound kanalından çıkış yapıldı..")
+func onClientChannelEnter(message *ari.StasisStart, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
 
-	clog(LevelInfo, "------------------ message.Channel.ID : %s", message.Channel.ID)
-
-	call, found := g.CM.GetCall(message.Channel.ID)
-
-	if !found {
-		clog(LevelInfo, "Call is not found : %s", message.Channel.ID)
-		return
-	}
-
-	call.Lock()
-
-	if call.State == CALL_STATE_Terminated {
-		clog(LevelInfo, "Call terminated before : %s", message.Channel.ID)
-		return
-	}
-
-	call_TerminationReason := CALL_TERMINATION_REASON_ClientHangup
-
-	if call.State == CALL_STATE_BridgedWithAgent {
-		call_TerminationReason = CALL_TERMINATION_REASON_Abandon
-	}
-
-	call.Unlock()
-
-	go g.CM.terminateCall(call, call_TerminationReason)
-
-}
-
-func OnClientChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.ChannelHandle, ariAppInfo AriAppInfo) {
-	clog(LevelInfo, "Inbound kanalından giriş yapıldı..")
+	clog(LevelInfo, "[INBOUND_ENTERED] %s", message.Channel.ID)
 
 	call := CreateCall(message, message.Channel.ID, message.Channel.Name, message.Args[0], ariAppInfo.MediaServerId)
 
-	//To DO:  Önce ARI bağlantısını kontrol et ,  uygun değilse çağrıyı reddet
-
-	//To DO: Call boş mu
-
 	if call == nil {
-
-		//To DO: Kanalı reject et ...
-
-		clog(LevelInfo, "Call is empty : %s", message.Channel.ID)
+		h.Hangup()
+		clog(LevelError, "[CALL_CREATE_ERROR] %s call is empty , channel hangup", message.Channel.ID)
 		return
 	}
 
 	key := h.Key()
 
 	if key == nil {
-		clog(LevelError, "[OnClientChannelEnter] Channel Key is nil for Channel ID : %s ", message.Channel.ID)
+		clog(LevelError, "[CALL_CHANNEL_ERROR] %s Channel Key is nil", message.Channel.ID)
 		return
 	}
 
@@ -501,10 +358,37 @@ func OnClientChannelEnter(message *ari.StasisStart, cl ari.Client, h *ari.Channe
 	call.InstanceID = ariAppInfo.InstanceID
 	call.LogOnInit()
 
-	//To DO: AID bağlantısını kontrol et  , uygun değilse çağrıyı reddet
+	clog(LevelDebug, "[CALL_CREATED] %+v", call)
 
-	//To DO: Redis Bağlatısını kontrol et  , uygun değilse çağrıyı reddet
-
-	clog(LevelInfo, "[CALL_CREATED] %+v", call)
 	go g.CM.processNewInboundCall(call)
 }
+
+/*
+// dropDistributionLatecomers, OnOutboundChannelEnter içinden Lock altında çağrılır.
+func (cm *CallManager) dropDistributionLatecomers(call *Call, answeredChannelID string) {
+	// Burada kilit zaten OnOutboundChannelEnter tarafından tutuluyor olmalı.
+
+	// Temsilcinin ARI istemcisine erişmek için ConnectionId kullanılır.
+	ariClient, found := g.ACM.GetClient(call.ConnectionName)
+	if !found {
+		clog(LevelError, "[%s] Cannot drop latecomers: ARI Client not found.", call.UniqueId)
+		return
+	}
+
+	for currentChannelID := range call.CurrentDistributionAttempts {
+		if currentChannelID != answeredChannelID {
+			clog(LevelDebug, "[%s] Dropping latecomer channel: %s", call.UniqueId, currentChannelID)
+
+			// Kanala erişim ve kapatma
+			latecomerChannelHandle := ariClient.Channel().Get(currentChannelID)
+
+			if err := latecomerChannelHandle.Hangup(); err != nil {
+				clog(LevelError, "[%s] Failed to hangup latecomer %s: %v", call.UniqueId, currentChannelID, err)
+				// Hata olsa bile devam et.
+			}
+
+			// Haritadan silme (Zaten Lock altındayız)
+			delete(call.CurrentDistributionAttempts, currentChannelID)
+		}
+	}
+} */
