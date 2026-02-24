@@ -17,6 +17,7 @@ const REDIS_GBWEBPHONE_CHANNEL = "channelGBWebPhone"
 const REDIS_POSITION_INFORMATION_CHANNEL_PREFIX = "channelPositionDistribution"
 const REDIS_QUEUE_MATCH_COUNT_CHANNEL = "channelQueueMatchCount"
 const MEDIA_URI_FILE_PREFIX = "sound:"
+const BRIDGE_PREFIX = "queue-"
 
 // DistributionMessage, yayınlayacağımız mesajın ana yapısıdır
 type RedisPositionMessage struct {

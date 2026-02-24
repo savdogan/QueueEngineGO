@@ -221,8 +221,6 @@ func InstantiateCall(message *ari.StasisStart, uniqueId string, channel string, 
 		call.IvrIteration = DEFAULT_IVR_ITERATION
 	}
 
-	// Loglama (Bu işlevin dışarıda tanımlandığı varsayılmıştır)
-	//TO DO : Logu burada yap....
 	if message.Channel.ID != "" {
 		call.ChannelId = message.Channel.ID
 		call.ChannelName = message.Channel.Name

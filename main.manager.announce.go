@@ -37,7 +37,7 @@ func (cm *CallManager) setupPositionAnnounce(call_UniqueId string, initial bool)
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		err := clogE(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		err := clogE(LevelTrace, "[CALL_PROCESS_NOT_FOUND] , call id : %s", call_UniqueId)
 		return err
 	}
 
@@ -92,7 +92,7 @@ func (cm *CallManager) setupActionAnnounce(call_UniqueId string, initial bool) e
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		return clogE(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		return clogE(LevelTrace, "[CALL_PROCESS_NOT_FOUND] , call id : %s", call_UniqueId)
 	}
 
 	call.RLock()
@@ -150,7 +150,7 @@ func (cm *CallManager) setupPeriodicAnnounce(call_UniqueId string, initial bool)
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		return clogE(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		return clogE(LevelTrace, "[CALL_PROCESS_NOT_FOUND] , call id : %s", call_UniqueId)
 	}
 
 	call.RLock()
@@ -202,7 +202,7 @@ func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelTrace, "[CALL_PROCESS_NOT_FOUND] , call id : %s", call_UniqueId)
 		return
 	}
 
@@ -241,7 +241,7 @@ func (cm *CallManager) runActionPeriodicAnnounce(call_UniqueId string) {
 		queue_PeriodicAnnounce,
 	}
 
-	go g.CM.startAnnounce(announceList, call, false, CALL_SCHEDULED_ACTION_PeriodicAnnounce)
+	go g.CM.startAnnounce(announceList, call, CALL_SCHEDULED_ACTION_PeriodicAnnounce)
 
 }
 
@@ -252,7 +252,7 @@ func (cm *CallManager) runActionPositionAnnounce(call_UniqueId string) {
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelTrace, "[CALL_PROCESS_NOT_FOUND] , call id : %s", call_UniqueId)
 		return
 	}
 
@@ -300,7 +300,7 @@ func (cm *CallManager) runActionPositionAnnounce(call_UniqueId string) {
 
 	clog(LevelDebug, "[Değerler]%+v", announceList)
 
-	go g.CM.startAnnounce(announceList, call, false, CALL_SCHEDULED_ACTION_PositionAnnounce)
+	go g.CM.startAnnounce(announceList, call, CALL_SCHEDULED_ACTION_PositionAnnounce)
 
 }
 
@@ -311,7 +311,7 @@ func (cm *CallManager) runActionQueueTimeOut(call_UniqueId string) {
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelTrace, "[CALL_PROCESS_NOT_FOUND] , call id : %s", call_UniqueId)
 		return
 	}
 
@@ -346,7 +346,7 @@ func (cm *CallManager) runActionClientAnnounce(call_UniqueId string) {
 	call, found := cm.GetCall(call_UniqueId)
 
 	if !found {
-		clog(LevelInfo, "[CALL_PROCESS_ERROR] call is not found , call id : %s", call_UniqueId)
+		clog(LevelTrace, "[CALL_PROCESS_NOT_FOUND] , call id : %s", call_UniqueId)
 		return
 	}
 
@@ -378,7 +378,7 @@ func (cm *CallManager) runActionClientAnnounce(call_UniqueId string) {
 		queue_ClientAnnounceSoundFile,
 	}
 
-	go g.CM.startAnnounce(announceList, call, false, CALL_SCHEDULED_ACTION_ClientAnnounce)
+	go g.CM.startAnnounce(announceList, call, CALL_SCHEDULED_ACTION_ClientAnnounce)
 
 }
 
@@ -403,17 +403,7 @@ func (cm *CallManager) startMoh(call *Call, callLocked bool) error {
 		return nil
 	}
 
-	currentQueue, err := g.QCM.GetQueueByName(call_QueueName)
-	currentQueue.RLock()
-	currentQueue_MusicClass := currentQueue.MusicClass
-	currentQueue.RUnlock()
-
-	if err != nil {
-		clog(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
-		return err
-	}
-
-	musicClass := currentQueue_MusicClass
+	musicClass := g.QCM.GetQueueMusicClass(call_QueueName)
 	if musicClass == "" {
 		musicClass = "Default"
 		clog(LevelDebug, "currentQueuesicClass is empty. Using Default MOH Class for Call Moh Start , Call Id : %s", call_UniqueId)
@@ -422,18 +412,16 @@ func (cm *CallManager) startMoh(call *Call, callLocked bool) error {
 	ariClient, found := g.ACM.GetClient(call_ConnectionName)
 
 	if !found {
-		clog(LevelError, "ARI Client not found for Call Moh Start , Call Id : %s", call_UniqueId)
-		return fmt.Errorf("ARI Client not found for Call Moh Start , Call Id : %s", call_UniqueId)
+		return clogE(LevelError, "ARI Client not found for Call Moh Start , Call Id : %s", call_UniqueId)
 	}
 
 	ch := ariClient.Channel().Get(call_ChannelKey)
 
 	if ch.ID() == "" {
-		clog(LevelError, "[MOH_ERROR]Error starting MOH for Call Id : %s , Channel is not found", call_UniqueId)
-		return err
+		return clogE(LevelError, "[MOH_ERROR]Error starting MOH for Call Id : %s , Channel is not found", call_UniqueId)
 	}
 
-	err = ch.MOH(musicClass)
+	err := ch.MOH(musicClass)
 	if err != nil {
 		clog(LevelError, "[MOH_ERROR]Error starting MOH for Call Id : %s , Error : %+v", call_UniqueId, err)
 		return err
@@ -518,23 +506,9 @@ func (cm *CallManager) stopMoh(call *Call, callLocked bool) error {
 	return nil
 }
 
-func (cm *CallManager) startAnnounce(announceFile []string, call *Call, callLocked bool, action CALL_SCHEDULED_ACTION) error {
+func (cm *CallManager) startAnnounce(announceFile []string, call *Call, action CALL_SCHEDULED_ACTION) error {
 
-	call_UniqueId, call_ConnectionName, call_QueueName, _, _ := call.getMainInformations(callLocked)
-
-	currentQueue, err := g.QCM.GetQueueByName(call_QueueName)
-	if err != nil {
-		return clogE(LevelError, "Queue not found for Call: %s , QueueName : %s", call_UniqueId, call_QueueName)
-	}
-	currentQueue.RLock()
-	currentQueue_MusicClass := currentQueue.MusicClass
-	currentQueue.RUnlock()
-
-	musicClass := currentQueue_MusicClass
-	if musicClass == "" {
-		musicClass = "Default"
-		clog(LevelDebug, "currentQueuesicClass is empty. Using Default MOH Class for Call Moh Start , Call Id : %s", call_UniqueId)
-	}
+	call_UniqueId, call_ConnectionName, _, _, _, _ := call.getMainInformations(false)
 
 	ariClient, found := g.ACM.GetClient(call_ConnectionName)
 
@@ -545,12 +519,12 @@ func (cm *CallManager) startAnnounce(announceFile []string, call *Call, callLock
 	ch := ariClient.Channel().Get(ari.NewKey(ari.ChannelKey, call_UniqueId))
 
 	if ch.ID() == "" {
-		return clogE(LevelError, "[MOH_ERROR]Error stoping MOH for Call Id : %s , Channel is not found", call_UniqueId)
+		return clogE(LevelError, "[ANNOUNCE_SESSION_ERROR]  Call id : %s , Channel is not found", call_UniqueId)
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
-	call.setActionProperties(callLocked, cancelFunc, action)
+	call.setActionProperties(false, cancelFunc, action)
 
 	var session play.Session
 
@@ -558,31 +532,59 @@ func (cm *CallManager) startAnnounce(announceFile []string, call *Call, callLock
 		session = play.Play(ctx, ch, play.URI("sound:"+announceFile[0]))
 	} else {
 
-		playFileList := make([]play.OptionFunc, len(announceFile))
+		for _, file := range announceFile {
 
-		for index, file := range announceFile {
-			playFileList[index] = play.URI("sound:" + file)
+			call.RLock()
+			if call.State == CALL_STATE_Terminated {
+				break
+			}
+			call.RUnlock()
+			session = play.Play(ctx, ch, play.URI("sound:"+file))
+			if err := session.Err(); err != nil {
+				clog(LevelError, "[ANNOUNCE_SESSION_ERROR] (-1-) action : %s,  call : %s, announce : %s, failed to play announce %+v ", action, call_UniqueId, announceFile, err)
+			}
 		}
 
-		session = play.Play(ctx, ch, playFileList...)
+		/*
+			playFileList := make([]play.OptionFunc, len(announceFile))
+
+			for index, file := range announceFile {
+				playFileList[index] = play.URI("sound:" + file)
+			}
+
+			session = play.Play(ctx, ch, playFileList...)
+		*/
 	}
 
-	if err := session.Err(); err != nil {
-		clog(LevelError, "[ANNOUNCE_SESSION_ERROR] (-1-) action : %s,  call : %s, announce : %s, failed to play announce %+v ", action, call_UniqueId, announceFile, err)
-		go cm.onEndAction(call_UniqueId, action)
-		return err
-	}
+	/*
+		if err := session.Err(); err != nil {
+			clog(LevelError, "[ANNOUNCE_SESSION_ERROR] (-1-) action : %s,  call : %s, announce : %s, failed to play announce %+v ", action, call_UniqueId, announceFile, err)
+
+			if call.State != CALL_STATE_Terminated {
+				go cm.onEndAction(call_UniqueId, action)
+			}
+			return err
+		} */
 
 	go func() {
 
 		result, err := session.Result()
 		if err != nil {
 			clog(LevelError, "[ANNOUNCE_SESSION_ERROR] (-2-) action : %s,  call : %s , result :  %+v , error : %+v ", action, call_UniqueId, result, err)
+
 		} else {
 			clog(LevelDebug, "[ANNOUNCE_SESSION_RESULT] (-3-) action : %s,  call : %s , result :  %+v", action, call_UniqueId, result)
 		}
 
-		go cm.onEndAction(call_UniqueId, action)
+		call, found := g.CM.GetCall(call_UniqueId)
+
+		if found {
+			call.RLock()
+			defer call.RUnlock()
+			if call.State != CALL_STATE_Terminated {
+				go cm.onEndAction(call_UniqueId, action)
+			}
+		}
 
 	}()
 

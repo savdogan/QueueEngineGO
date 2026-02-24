@@ -9,7 +9,7 @@
     "publisherHostName": "GB90015176N1",
     "LogDirectory": "logs",
     "HttpServerEnabled": true,
-    "Version": 20,
+    "Version": 1,
     "HttpPort": 9091,
     "DBConnectingString": "server=GAVWSQLTST01.global-bilgi.entp;database=gbWebPhone_test;integrated security=true",
     "AppName": "QUEUE-ENGINE-GO"
